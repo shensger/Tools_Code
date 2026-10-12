@@ -1,0 +1,4 @@
+alpaca-py>=0.40
+pandas>=2.0
+numpy
+matplotlib  # only for backtest --plot
