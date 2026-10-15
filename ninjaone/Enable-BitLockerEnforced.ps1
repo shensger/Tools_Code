@@ -15,7 +15,7 @@
     Escrow targets, tried in order:
       1. Active Directory (domain-joined, DC reachable)
       2. Entra ID (Entra-joined or hybrid-joined)
-      3. NinjaOne custom field (if -NinjaField is set; use a Secure field)
+      3. NinjaOne Secure custom field (default: bitlockerRecoveryKey) - works off-network
 
     Also writes the BitLocker policy keys (HKLM\SOFTWARE\Policies\Microsoft\FVE) so
     future encryption uses XTS-AES 256 and backs up recovery info to AD DS.
@@ -24,8 +24,9 @@
     OS drive. Default: $env:SystemDrive (C:)
 
 .PARAMETER NinjaField
-    Name of a NinjaOne device custom field (Secure type recommended) to store the
-    recovery password. Ninja script variable: ninjaField
+    Name of a NinjaOne device custom field (Secure type, Automations = Write) to store
+    the recovery password. Default: bitlockerRecoveryKey. Override with the Ninja script
+    variable ninjaField. Set to "none" to disable.
 
 .PARAMETER AllowNoEscrow
     Enable protection even if the key could not be escrowed anywhere. Not recommended.
@@ -45,7 +46,7 @@
 [CmdletBinding()]
 param(
     [string]$MountPoint = $env:SystemDrive,
-    [string]$NinjaField = $env:ninjaField,
+    [string]$NinjaField = $(if ($env:ninjaField) { $env:ninjaField } else { 'bitlockerRecoveryKey' }),
     [switch]$AllowNoEscrow = ($env:allowNoEscrow -eq 'true'),
     [switch]$SkipPolicyKeys = ($env:skipPolicyKeys -eq 'true')
 )
@@ -154,14 +155,23 @@ foreach ($p in $rp) {
 }
 
 # 3. NinjaOne custom field
-if ($NinjaField -and (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) {
-    try {
-        $keys = ($rp | ForEach-Object { "$($_.KeyProtectorId): $($_.RecoveryPassword)" }) -join ' | '
-        Ninja-Property-Set $NinjaField $keys
-        Write-Log "Recovery key written to NinjaOne field '$NinjaField'."
-        $escrowed += 'NinjaOne'
-    } catch {
-        Write-Log "NinjaOne field write failed: $($_.Exception.Message)"
+if ($NinjaField -and $NinjaField -ne 'none') {
+    if (-not (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) {
+        Write-Log "Ninja-Property-Set not available (not running under the NinjaOne agent) - skipping Ninja field."
+    } else {
+        try {
+            $keys = ($rp | ForEach-Object { "$($_.KeyProtectorId): $($_.RecoveryPassword)" }) -join ' | '
+            # Ninja-Property-Set reports problems (missing field, no write permission) as output text, not exceptions
+            $result = Ninja-Property-Set $NinjaField $keys 2>&1 | Out-String
+            if ($result -match 'error|not found|denied|invalid|unable|fail') {
+                Write-Log "NinjaOne field write failed: $($result.Trim()). Check that Secure field '$NinjaField' exists, is assigned to this device's role, and has Automations = Write."
+            } else {
+                Write-Log "Recovery key written to NinjaOne field '$NinjaField'."
+                $escrowed += 'NinjaOne'
+            }
+        } catch {
+            Write-Log "NinjaOne field write failed: $($_.Exception.Message)"
+        }
     }
 }
 
@@ -170,7 +180,7 @@ if (-not $escrowed) {
     if ($AllowNoEscrow) {
         Write-Log "WARNING: Key not escrowed anywhere, continuing because -AllowNoEscrow is set."
     } else {
-        Write-Log "ERROR: Recovery key could not be escrowed anywhere. NOT enabling protection. Connect to VPN/domain or set a Ninja field, then re-run."
+        Write-Log "ERROR: Recovery key could not be escrowed anywhere. NOT enabling protection. Create the Ninja Secure field '$NinjaField' (or connect to VPN/domain), then re-run."
         exit 3
     }
 }
