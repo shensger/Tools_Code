@@ -94,3 +94,12 @@ def test_login_flow_with_totp():
         c.list_companies()
         body = json.loads(verify.calls.last.request.content)
         assert body["mfaToken"] == "mfa-token" and len(body["code"]) == 6
+
+
+def test_analyze_writes_report(api, tmp_path, monkeypatch):
+    monkeypatch.setenv("AE_REPORT_DIR", str(tmp_path / "reports"))
+    out = server.ae_analyze_request(request_id=RID)
+    p = Path(out["report_path"])
+    assert p.exists() and p.read_text(encoding="utf-8").startswith("<!doctype html>")
+    assert "Executive Summary: MCUXpresso IDE 25.6" in out["report_html"]
+    assert "NEEDS AUTHORIZATION" in out["report_html"]

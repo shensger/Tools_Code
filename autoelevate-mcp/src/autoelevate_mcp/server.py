@@ -17,12 +17,14 @@ from mcp.types import ToolAnnotations
 from .analysis import ROOT, Analysis, analyze, load_yaml, render_cw_note, render_markdown, _get, _norm, _contains_any
 from .client import ELEVATION_TYPES, RULE_LEVELS, AutoElevateClient
 from .intel import Intel
+from .report import render_html
 
 INSTRUCTIONS = """AutoElevate (CyberFOX) privilege management for an MSP.
 
 Approval workflow - always in this order:
 1. ae_analyze_request on the request (by AutoElevate request id or ConnectWise ticket number).
-2. Show the user the verdict table. Don't approve on your own judgment.
+2. Show the user the executive summary: publish `report_html` as an artifact when you can,
+   otherwise give them `report_path`. Don't approve on your own judgment.
 3. Post the returned cw_note to the request's ConnectWise ticket with the ConnectWise tools.
 4. Only after the user explicitly says to, call ae_decide_request with confirm=true.
    An APPROVE against a DENY or ESCALATE verdict needs the user's override_reason.
@@ -158,7 +160,9 @@ def ae_analyze_request(request_id: str | None = None, ticket_id: int | None = No
     the client's approved software baseline (3.4.8), restricted categories (remote access,
     P2P, AI, consumer, dual-use), shells/OS binaries, device posture, and recommends the
     narrowest approval scope. Returns a verdict (APPROVE / ESCALATE / DENY), a markdown
-    table to show the user, and `cw_note` text to post on the ConnectWise ticket.
+    table, `cw_note` text to post on the ConnectWise ticket, and a one-slide executive
+    summary: `report_path` (HTML saved under ~/AutoElevateReports) and `report_html`
+    (the same page as an artifact-ready fragment; publish it to show the user).
     """
     rid = _resolve(request_id, ticket_id)
     req = client().get_request(rid)
@@ -171,7 +175,19 @@ def ae_analyze_request(request_id: str | None = None, ticket_id: int | None = No
     a = analyze(req, policy=policy, controls=controls, baseline=load_baseline(company),
                 existing_rules=rules, intel=intel() if run_intel else None)
     _analyses[rid] = (time.time(), a)
+    report_path = None
+    try:
+        out_dir = Path(os.environ.get("AE_REPORT_DIR", Path.home() / "AutoElevateReports"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        stem = "_".join(filter(None, [time.strftime("%Y%m%d"), str(a.context.get("ticket") or rid[:8]),
+                                      _slug(a.software.get("product") or a.software.get("file_name") or "")]))
+        report_path = out_dir / f"{stem}.html"
+        report_path.write_text(render_html(a), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        report_path = None
     return {
+        "report_path": str(report_path) if report_path else None,
+        "report_html": render_html(a, standalone=False),
         "verdict": a.verdict,
         "recommendation": a.recommendation.__dict__,
         "markdown": render_markdown(a),
