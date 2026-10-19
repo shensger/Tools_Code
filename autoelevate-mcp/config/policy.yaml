@@ -1,0 +1,120 @@
+# Software policy used by the pre-approval analysis. Matching is case-insensitive
+# against the file name, product name, file description and publisher.
+
+# OS components, shells and living-off-the-land binaries. Elevating these hands the
+# user an admin shell, so the analysis denies standing rules for them and escalates
+# one-time requests. (CyberFOX guidance: never create rules for OS processes,
+# PowerShell, cmd, Control Panel items, etc.)
+privileged_binaries:
+  - powershell.exe
+  - powershell_ise.exe
+  - pwsh.exe
+  - cmd.exe
+  - wscript.exe
+  - cscript.exe
+  - mshta.exe
+  - rundll32.exe
+  - regsvr32.exe
+  - regedit.exe
+  - reg.exe
+  - mmc.exe
+  - certutil.exe
+  - bitsadmin.exe
+  - wmic.exe
+  - schtasks.exe
+  - sc.exe
+  - net.exe
+  - net1.exe
+  - netsh.exe
+  - installutil.exe
+  - msbuild.exe
+  - cmstp.exe
+  - wt.exe
+  - windowsterminal.exe
+  - taskmgr.exe
+  - control.exe
+  - explorer.exe
+  - bash.exe
+  - wsl.exe
+
+# Binaries that are fine to elevate one-time but whose real target is in the arguments.
+wrapper_binaries:
+  - msiexec.exe
+  - dllhost.exe
+  - consent.exe
+
+# Product names that mark a Windows OS component.
+os_product_names:
+  - microsoft windows operating system
+
+# Category lists line up with the Findings tab of the software inventory report.
+categories:
+  remote_access:
+    action: deny        # AC.L2-3.1.12 - unapproved remote access is an automatic deny
+    # Your sanctioned remote support tools. A match here skips the category check.
+    allow: []           # e.g. ["splashtop sos", "logmein rescue", "screenconnect"]
+    match: [anydesk, teamviewer, screenconnect, connectwise control, splashtop, rustdesk,
+            ultraviewer, logmein, gotoassist, goto resolve, "remote utilities", radmin,
+            tightvnc, ultravnc, realvnc, "vnc viewer", "vnc server", "chrome remote desktop",
+            parsec, supremo, aeroadmin, dwservice, "zoho assist", bomgar, beyondtrust remote,
+            atera, ammyy, netsupport]
+  p2p_torrent:
+    action: deny
+    match: [utorrent, bittorrent, qbittorrent, transmission, vuze, deluge, frostwire, limewire, emule]
+  crypto:
+    action: deny
+    match: [xmrig, nicehash, "crypto miner", cgminer, bfgminer, phoenixminer]
+  vpn_proxy:
+    action: review      # consumer VPN/proxy can bypass boundary protections
+    match: [nordvpn, expressvpn, protonvpn, "private internet access", surfshark, windscribe,
+            hotspot shield, psiphon, "tor browser", ultrasurf, cyberghost]
+  ai_apps:
+    action: review      # CUI handling - needs an approved-use decision first
+    match: [chatgpt, "openai", "claude", "anthropic", ollama, "lm studio", "gpt4all", jan.ai,
+            "copilot", perplexity, "deepseek", "gemini", "msty", "anythingllm"]
+  consumer:
+    action: review
+    match: [steam, "epic games", discord, spotify, "itunes", "dropbox", "google drive",
+            "icloud", "whatsapp", "telegram", "signal", "battle.net", "ea desktop",
+            "roblox", "minecraft", "vlc", "ccleaner", "avast", "avg ",
+            "mcafee", "norton", "malwarebytes"]
+  system_tools:
+    action: review      # dual-use admin tooling - legitimate for IT, not for end users
+    match: [wireshark, nmap, "process hacker", "system informer", "procmon", "sysinternals",
+            "psexec", mimikatz, "nirsoft", "cheat engine", "hashcat", "john the ripper",
+            "advanced ip scanner", "angry ip scanner", putty, winscp, "filezilla"]
+
+# Folders that mean the user downloaded/installed the software themselves (CM.L2-3.4.9).
+user_writable_paths:
+  - \users\
+  - \downloads\
+  - \appdata\
+  - \temp\
+  - \desktop\
+
+# Words that mark a one-time installer (approve once, no standing rule).
+installer_markers: [setup, install, installer, ".msi", "update", "bootstrapper"]
+
+# Map product-name keywords to endoflife.date slugs for lifecycle checks.
+endoflife_products:
+  "temurin": eclipse-temurin
+  "corretto": amazon-corretto
+  "zulu": azul-zulu
+  java: oracle-jdk
+  "jdk": oracle-jdk
+  python: python
+  "node.js": nodejs
+  nodejs: nodejs
+  ".net": dotnet
+  "microsoft office": office
+  "visual studio": visual-studio
+  "sql server": mssqlserver
+  "firefox": firefox
+  "google chrome": chrome
+  "php": php
+  "postgresql": postgresql
+  "mysql": mysql
+  "tomcat": tomcat
+  "notepad++": notepad-plus-plus
+  "veeam": veeam-backup-and-replication
+  "citrix virtual apps": citrix-vad

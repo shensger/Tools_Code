@@ -1,0 +1,75 @@
+{
+ "id": "00000000-0000-0000-0000-000000000001",
+ "approvalState": "PENDING",
+ "companyName": "Example Client",
+ "locationName": "Main Office",
+ "computerName": "PC-TEST01",
+ "computerPlatform": "windows",
+ "duplicateRequestCount": 1,
+ "elevationType": "admin",
+ "requestType": "elevatedProcess",
+ "elevationRequestExplanation": "",
+ "ruleCreated": false,
+ "createdAt": "1792440821125",
+ "ticketingSystemInfo": {
+  "ticketId": 100001,
+  "ticketIdDisplay": 100001,
+  "type": "connectWise"
+ },
+ "virusScanInfo": {
+  "type": "virusTotal"
+ },
+ "computerState": {
+  "data": {
+   "agentVersion": "2.11.1959.0",
+   "elevationMode": "live",
+   "isAntivirusEnabled": true,
+   "isAntivirusUpToDate": true,
+   "isWindowsUpdateEnabled": true,
+   "isDomainMember": true,
+   "technicianMode": false,
+   "adminMembers": {
+    "count": 3
+   }
+  }
+ },
+ "event": {
+  "computerOperatingSystem": "Microsoft Windows 11 Pro",
+  "type": "UAC_TRIPPED",
+  "data": {
+   "user": {
+    "domain": "EXAMPLE",
+    "name": "jdoe"
+   },
+   "trigger": {
+    "arguments": "/SPAWNWND=$C0918 /NOTIFYWND=$B090C",
+    "fileDescription": "MCUXpresso IDE Installer",
+    "fileHash": "f74510ee214bc4bbda6c25cab68bc6d2",
+    "fileHashes": {
+     "MD5": "f74510ee214bc4bbda6c25cab68bc6d2",
+     "SHA256": "5dd9d2dd50e24967ff4fc672f050e4ce63d96a5fb82f50a59d83f0f7c2ab0854"
+    },
+    "fileName": "MCUXpressoIDE_25.6.136.exe",
+    "filePath": "C:\\Users\\jdoe\\Downloads\\MCUXpressoIDE_25.6.136.exe",
+    "fileSize": 1119400408,
+    "fileVersion": "v25.6.136",
+    "isPublisherCertVerified": true,
+    "isSigned": true,
+    "productCompany": "NXP Semiconductors USA, Inc.",
+    "productName": "MCUXpresso IDE",
+    "productVersion": "25.6",
+    "uacTitle": "MCUXpresso IDE Installer",
+    "publisherCertInfo": {
+     "isSelfSigned": false,
+     "isVerified": true,
+     "issuer": "CN=DigiCert Trusted G4 Code Signing RSA4096 SHA384 2021 CA1, O=\"DigiCert, Inc.\", C=US",
+     "subject": "CN=NXP SEMICONDUCTORS N.V., O=NXP SEMICONDUCTORS N.V., L=Eindhoven, C=NL",
+     "thumbprint": "2115A9E5CA0B869DC9E0DE6085255D0BE1C61469",
+     "validFrom": "6/26/2024 12:00:00 AM",
+     "validTo": "6/25/2027 11:59:59 PM",
+     "verificationErrorMessage": null
+    }
+   }
+  }
+ }
+}
