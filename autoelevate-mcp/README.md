@@ -10,7 +10,7 @@ AutoElevate has no public API. This server uses the same JSON API the `msp.autoe
 |---|---|
 | `ae_list_requests` | Pending (or all) elevation requests for the last N days, optionally one company |
 | `ae_get_request` | Full request by AutoElevate id **or ConnectWise ticket number** |
-| `ae_analyze_request` | The pre-approval analysis. Returns verdict, markdown table and a ready-to-post CW note |
+| `ae_analyze_request` | The pre-approval analysis. Returns verdict, a one-slide executive summary (HTML saved to `~\AutoElevateReports`, override with `AE_REPORT_DIR`), a markdown table and a ready-to-post CW note |
 | `ae_decide_request` | Approve or deny. Guarded (see below) |
 | `ae_audit_rules` | Audits existing rules: shells/LOLBins, OS components, all-companies rules, remote access, etc. |
 | `ae_list_computers` | Agents with version, elevation mode, AV and Windows Update state |
