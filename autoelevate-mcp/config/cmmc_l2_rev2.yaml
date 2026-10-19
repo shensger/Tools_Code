@@ -1,0 +1,35 @@
+# CMMC Level 2 practices (NIST SP 800-171 Rev 2) used by the pre-approval analysis.
+# DoD's interim guidance during the CMMC pause enforces Rev 2. To move to Rev 3,
+# copy this file, change the IDs/titles, and point AE_CONTROL_MAP at the new file.
+framework: "CMMC 2.0 Level 2 / NIST SP 800-171 Rev 2"
+
+practices:
+  CM.L2-3.4.3: System Change Management - track, review, approve/disapprove and log changes
+  CM.L2-3.4.4: Security Impact Analysis - analyze security impact of changes before implementation
+  CM.L2-3.4.6: Least Functionality - systems provide only essential capabilities
+  CM.L2-3.4.7: Nonessential Functionality - restrict nonessential programs, functions, ports, protocols
+  CM.L2-3.4.8: Application Execution Policy - deny-by-exception or permit-by-exception (allowlisting)
+  CM.L2-3.4.9: User-Installed Software - control and monitor user-installed software
+  AC.L2-3.1.5: Least Privilege - allow only authorized access needed for assigned tasks
+  AC.L2-3.1.7: Privileged Functions - prevent non-privileged users from executing privileged functions; audit them
+  AC.L2-3.1.12: Control Remote Access - monitor and control remote access sessions
+  SI.L2-3.14.1: Flaw Remediation - identify, report and correct system flaws in a timely manner
+  SI.L2-3.14.2: Malicious Code Protection - protection from malicious code at appropriate locations
+  RA.L2-3.11.2: Vulnerability Scan - scan for vulnerabilities and when new ones are identified
+  AU.L2-3.3.1: System Auditing - create and retain audit records
+
+# Which practices each analysis check provides evidence for.
+checks:
+  signature:        [SI.L2-3.14.2, CM.L2-3.4.8]
+  malware_scan:     [SI.L2-3.14.2]
+  known_exploited:  [SI.L2-3.14.1, RA.L2-3.11.2]
+  cve_exposure:     [RA.L2-3.11.2, SI.L2-3.14.1]
+  end_of_life:      [SI.L2-3.14.1]
+  baseline:         [CM.L2-3.4.8]
+  user_installed:   [CM.L2-3.4.9]
+  functionality:    [CM.L2-3.4.6, CM.L2-3.4.7]
+  remote_access:    [AC.L2-3.1.12, CM.L2-3.4.7]
+  privileged_binary: [AC.L2-3.1.7, AC.L2-3.1.5]
+  scope:            [AC.L2-3.1.5]
+  device_posture:   [SI.L2-3.14.1, SI.L2-3.14.2]
+  change_record:    [CM.L2-3.4.3, CM.L2-3.4.4, AU.L2-3.3.1]

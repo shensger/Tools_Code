@@ -1,0 +1,22 @@
+# Approved software baseline for one client (CMMC L2 CM.L2-3.4.8 permit-by-exception).
+# Copy to baselines/<company-slug>.yaml, e.g. "Example Client" -> example-client.yaml.
+# Matching: `product` must appear in the request's product name / description / file name,
+# and `publisher` (if set) must share a word with the signer or vendor. Case-insensitive.
+company: "Example Client"
+aliases: []                      # other AutoElevate company names that use this baseline
+owner: "Client IT contact who signs off on additions"
+reviewed: 2026-10-19             # last annual review (CM.L2-3.4.1 baseline review)
+
+approved:
+  - product: "MCUXpresso IDE"
+    publisher: "NXP"
+    min_version: "25.6"
+    notes: "Engineering embedded dev - approved by <name> on <date>"
+  - product: "Adobe Acrobat"
+    publisher: "Adobe"
+  - product: "Microsoft Teams"
+    publisher: "Microsoft"
+
+denied:
+  - product: "AnyDesk"
+    reason: "Unapproved remote access; ScreenConnect is the sanctioned tool"

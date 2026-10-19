@@ -10,3 +10,7 @@ Scripts and tooling.
 ## activedirectory/
 
 - `Get-ADPasswordExpiry.ps1` – reports each AD user's last password change, password age, expiry date and days until expiry (uses `msDS-UserPasswordExpiryTimeComputed`, so fine-grained password policies are honored). Each user gets a Status of `Expired`, `ExpiringSoon`, `OK`, `NeverExpires` or `MustChange`, ready to pipe into an alerting step. Parameters: `-SearchBase`, `-Server`, `-WarningDays` (default 14), `-IncludeDisabled`, `-OnlyAlertable`, `-CsvPath`. Requires the ActiveDirectory module.
+
+## autoelevate-mcp/
+
+- MCP server for AutoElevate (CyberFOX) built on the admin portal's internal API. `ae_analyze_request` runs a CMMC Level 2 / NIST 800-171 Rev 2 pre-approval analysis on an elevation request (signature, VirusTotal, CISA KEV + NVD for the exact version, EOL, client software baseline, restricted categories, shells/LOLBins, device posture) and returns a verdict plus a ConnectWise note. `ae_decide_request` approves/denies only with confirmation, a fresh analysis, and a recorded override reason when going against the verdict. `ae_audit_rules` flags risky existing rules. See `autoelevate-mcp/README.md`.
