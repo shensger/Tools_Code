@@ -1,0 +1,42 @@
+# New-vendor / new-product review: controls, pass criteria, and how each is judged.
+# Results: PASS, CONDITIONAL (passes once the listed conditions are configured),
+# FAIL_CUI (fails only if CUI / controlled technical information is involved), FAIL.
+frameworks: "NIST SP 800-171 Rev 2 · NIST SP 800-53 Rev 5"
+
+controls:
+  - id: "3.4.6"
+    name: Least functionality
+    criterion: Only essential features enabled
+  - id: "3.4.7"
+    name: Nonessential functions
+    criterion: Nonessential functions turned off
+  - id: "3.4.8"
+    name: Execution policy
+    criterion: On the approved software list
+  - id: "3.4.9"
+    name: User-installed software
+    criterion: Users can't install add-ons
+  - id: "3.11.1"
+    name: Risk assessment
+    criterion: Risk documented and accepted
+  - id: "3.11.2"
+    name: Vulnerability scanning
+    criterion: Vendor scans and patches
+  - id: "3.13.11"
+    name: FIPS cryptography
+    criterion: FIPS-validated crypto for CUI
+  - id: CM-7
+    name: Least functionality
+    criterion: Unneeded services prohibited
+  - id: CM-10
+    name: Software usage
+    criterion: Licensed for every user
+  - id: SA-9
+    name: External services
+    criterion: FedRAMP Moderate for CUI
+  - id: SR-3
+    name: Supply chain controls
+    criterion: Sub-suppliers known, controlled
+  - id: SR-6
+    name: Supplier assessment
+    criterion: Current independent audits

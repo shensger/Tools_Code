@@ -18,6 +18,7 @@ from .analysis import ROOT, Analysis, analyze, load_yaml, render_cw_note, render
 from .client import ELEVATION_TYPES, RULE_LEVELS, AutoElevateClient
 from .intel import Intel
 from .report import render_html
+from .vendor import evaluate as evaluate_vendor, render_vendor_html
 
 INSTRUCTIONS = """AutoElevate (CyberFOX) privilege management for an MSP.
 
@@ -326,6 +327,49 @@ def ae_list_computers(company: str | None = None) -> list[dict]:
             "local_admins": _get(st, "adminMembers", "count"),
         })
     return out
+
+
+@mcp.tool(annotations=READ)
+def ae_vendor_review(intake: dict, facts: dict) -> dict:
+    """New vendor / product review against NIST SP 800-171 Rev 2 (3.4.6, 3.4.7, 3.4.8, 3.4.9,
+    3.11.1, 3.11.2, 3.13.11) and NIST SP 800-53 (CM-7, CM-10, SA-9, SR-3, SR-6).
+
+    Research the vendor FIRST (trust center, FedRAMP marketplace, pricing, AI/subprocessor
+    pages, CISA KEV) and pass what you found as `facts`; unknown facts are judged CONDITIONAL.
+
+    intake: the NEW VENDOR REQUEST form - vendor, product, users, licensing, cost, website, purpose.
+    facts: cui (yes/no/possible), deployment (saas/on_prem/desktop), fedramp (none/in_process/
+      moderate/high), fedramp_alternative, fips_validated, certifications [..], vendor_patches,
+      kev_note, free_tier_limit, plan, ai_features, public_sharing, marketplace_apps,
+      user_installable_addons, can_disable_nonessential, sso_enforceable, sso_requires,
+      subprocessors [..], hosting, ownership, cost_estimate, cost_label, incidents [..],
+      optional overrides at_risk [..] and conditions [..] (max 5 each, ~35 characters per line).
+
+    Returns the decision, per-control pass/fail with criteria and findings, components most at
+    risk, approval conditions, and a two-slide executive summary: `report_path` (HTML under
+    ~/AutoElevateReports) and `report_html` (artifact-ready; publish it to show the user).
+    """
+    r = evaluate_vendor(intake, facts)
+    report_path = None
+    try:
+        out_dir = Path(os.environ.get("AE_REPORT_DIR", Path.home() / "AutoElevateReports"))
+        out_dir.mkdir(parents=True, exist_ok=True)
+        report_path = out_dir / f"{time.strftime('%Y%m%d')}_vendor_{_slug(r.vendor)}_{_slug(r.product)}.html"
+        report_path.write_text(render_vendor_html(r), encoding="utf-8")
+    except Exception:  # noqa: BLE001
+        report_path = None
+    table = "\n".join(f"| {c.id} {c.name} | {c.criterion} | {c.finding} | {c.result} |" for c in r.controls)
+    return {
+        "decision": r.decision,
+        "headline": r.headline,
+        "counts": r.counts(),
+        "markdown": f"## {r.headline}\n\n| Control | Pass criterion | Finding | Result |\n|---|---|---|---|\n{table}",
+        "conditions": r.conditions,
+        "at_risk": r.at_risk,
+        "controls": [c.__dict__ for c in r.controls],
+        "report_path": str(report_path) if report_path else None,
+        "report_html": render_vendor_html(r, standalone=False),
+    }
 
 
 def main() -> None:

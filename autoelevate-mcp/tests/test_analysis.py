@@ -67,7 +67,7 @@ def test_recurring_app_gets_computer_level_rule(req, baseline):
 def test_no_baseline_escalates(req):
     a = analyze(req, baseline=None, intel=FakeIntel())
     assert a.verdict == "ESCALATE"
-    assert check(a, "baseline").practices == ["CM.L2-3.4.8"]
+    assert check(a, "baseline").practices[0] == "CM.L2-3.4.8" and "CM-10" in check(a, "baseline").practices
 
 
 def test_vt_detections_deny(req, baseline):

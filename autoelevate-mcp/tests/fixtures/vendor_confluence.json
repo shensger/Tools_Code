@@ -1,0 +1,36 @@
+{
+  "intake": {
+    "vendor": "Atlassian",
+    "product": "Confluence Cloud",
+    "users": "10-15",
+    "licensing": "SaaS; Free up to 10 users; Standard/Premium paid",
+    "cost": "Standard $5.42/user/month; Premium $10.44/user/month",
+    "website": "https://www.atlassian.com/software/confluence",
+    "purpose": "Team knowledge-management and documentation platform for engineering documentation, procedures, project information, meeting notes, requirements and technical knowledge."
+  },
+  "facts": {
+    "cui": "possible",
+    "deployment": "saas",
+    "fedramp": "none",
+    "fedramp_alternative": "FedRAMP Gov Cloud: from $64K/yr",
+    "fips_validated": "no",
+    "certifications": ["SOC 2 Type II", "ISO 27001", "C5 Type 2"],
+    "vendor_patches": "yes",
+    "kev_note": "9 Confluence entries in CISA KEV, all Server/Data Center; Atlassian patches the cloud.",
+    "free_tier_limit": 10,
+    "plan": "Standard",
+    "ai_features": "yes",
+    "public_sharing": "yes",
+    "marketplace_apps": "yes",
+    "user_installable_addons": "yes",
+    "can_disable_nonessential": "yes",
+    "sso_enforceable": "yes",
+    "sso_requires": "Atlassian Guard",
+    "subprocessors": ["AWS", "AI models", "Marketplace apps"],
+    "ownership": "Atlassian (NASDAQ: TEAM), US-based",
+    "hosting": "SaaS hosted on AWS; nothing to install",
+    "cost_label": "Est. cost, 15 users",
+    "cost_estimate": "≈ $1,760/yr",
+    "incidents": ["April 2022 outage: 775 customers offline up to 14 days"]
+  }
+}
