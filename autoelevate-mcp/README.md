@@ -54,7 +54,7 @@ The workflow it's built for: analyze, show you the table, post the `cw_note` to 
    py -m venv .venv
    .venv\Scripts\pip install -e .
    ```
-3. **Keys.** A free VirusTotal API key (required for the malware check; without it every request escalates). An NVD API key is optional but avoids rate limits.
+3. **Keys.** VirusTotal is optional: with `require_virustotal: false` in `config/policy.yaml` (the default) the malware check is marked skipped; set it to `true` once you add `VT_API_KEY`. An NVD API key is optional but avoids rate limits.
 4. **Claude Desktop config** (`%APPDATA%\Claude\claude_desktop_config.json`):
    ```json
    "autoelevate": {

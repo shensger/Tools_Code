@@ -324,6 +324,10 @@ def analyze(
         elif vt["status"] == "not_found":
             add("malware_scan", REVIEW, "Unknown to VirusTotal",
                 "No prior scans of this exact file. Verify the download source matches the vendor's site.")
+        elif vt["status"] == "skipped" and not policy.get("require_virustotal", True):
+            add("malware_scan", INFO, "VirusTotal skipped (not configured)",
+                "No VT_API_KEY, and policy.yaml has require_virustotal: false. Malware protection "
+                "(3.14.2) rests on the endpoint AV/EDR; the hash isn't checked here.")
         else:
             add("malware_scan", REVIEW, "VirusTotal not checked", vt["detail"])
 

@@ -178,3 +178,18 @@ def test_sanctioned_remote_tool_allowed(req, baseline):
     policy["categories"]["remote_access"]["allow"] = ["splashtop sos"]
     a = analyze(req, policy=policy, intel=FakeIntel())
     assert a.verdict != "DENY"
+
+
+class NoVTIntel(FakeIntel):
+    def virustotal(self, sha):
+        return {"status": "skipped", "detail": "VT_API_KEY not set."}
+
+
+def test_vt_optional_when_policy_allows(req, baseline):
+    policy = load_yaml(ROOT / "config" / "policy.yaml")
+    policy["require_virustotal"] = False
+    a = analyze(copy.deepcopy(req), policy=policy, baseline=baseline, intel=NoVTIntel())
+    assert check(a, "malware_scan").result == "INFO" and a.verdict == "APPROVE"
+    policy["require_virustotal"] = True
+    a = analyze(req, policy=policy, baseline=baseline, intel=NoVTIntel())
+    assert a.verdict == "ESCALATE"

@@ -1,3 +1,7 @@
+# Without a VirusTotal API key, false marks the malware check as skipped (INFO) instead of
+# escalating every request. Set true once VT_API_KEY is configured.
+require_virustotal: false
+
 # Software policy used by the pre-approval analysis. Matching is case-insensitive
 # against the file name, product name, file description and publisher.
 
