@@ -12,6 +12,7 @@ AutoElevate has no public API. This server uses the same JSON API the `msp.autoe
 | `ae_get_request` | Full request by AutoElevate id **or ConnectWise ticket number** |
 | `ae_analyze_request` | The pre-approval analysis. Returns verdict, a one-slide executive summary (HTML saved to `~\AutoElevateReports`, override with `AE_REPORT_DIR`), a markdown table and a ready-to-post CW note |
 | `ae_decide_request` | Approve or deny. Guarded (see below) |
+| `ae_vendor_review` | New vendor / product intake review against NIST 800-171 (3.4.6–3.4.9, 3.11.1, 3.11.2, 3.13.11) and 800-53 (CM-7, CM-10, SA-9, SR-3, SR-6). Returns pass/fail per control, components most at risk, approval conditions and a two-slide executive summary |
 | `ae_audit_rules` | Audits existing rules: shells/LOLBins, OS components, all-companies rules, remote access, etc. |
 | `ae_list_computers` | Agents with version, elevation mode, AV and Windows Update state |
 | `ae_list_companies` | Company names and ids |
@@ -86,3 +87,18 @@ pip install -e .[test]
 pytest
 ```
 The tests use an anonymized fixture from a real request and mock the AutoElevate API; nothing hits the network.
+
+## Vendor reviews
+
+`ae_vendor_review(intake, facts)` evaluates a NEW VENDOR REQUEST. `intake` is the form (vendor, product, users, licensing, cost, website, purpose). `facts` is what research found: CUI intent, FedRAMP level, FIPS validation, audit reports, AI and sharing features, add-on controls, SSO, subprocessors. Anything not supplied is judged CONDITIONAL, never PASS.
+
+| Result | Meaning |
+|---|---|
+| PASS | Met today |
+| CONDITIONAL | Met once the approval conditions are configured |
+| FAIL · CUI | Fails only if CUI, ITAR or controlled technical information is stored (e.g. no FedRAMP Moderate, no FIPS-validated crypto) |
+| FAIL | Fails for the intended use; the decision becomes DENY |
+
+The pass criteria live in `config/vendor_review.yaml`. `tests/fixtures/vendor_confluence.json` is a worked example (Atlassian Confluence Cloud: conditional approval for non-CUI work only).
+
+The elevation analysis checks now also list their NIST SP 800-53 counterparts (CM-7, CM-10, CM-11, SI-3, SI-7, RA-5, SR-3) next to the CMMC practices.

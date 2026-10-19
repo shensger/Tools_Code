@@ -15,21 +15,31 @@ practices:
   AC.L2-3.1.12: Control Remote Access - monitor and control remote access sessions
   SI.L2-3.14.1: Flaw Remediation - identify, report and correct system flaws in a timely manner
   SI.L2-3.14.2: Malicious Code Protection - protection from malicious code at appropriate locations
+  RA.L2-3.11.1: Risk Assessments - periodically assess risk to operations, assets and individuals
   RA.L2-3.11.2: Vulnerability Scan - scan for vulnerabilities and when new ones are identified
   AU.L2-3.3.1: System Auditing - create and retain audit records
+  # NIST SP 800-53 Rev 5 counterparts shown alongside
+  CM-7: Least Functionality (incl. CM-7(5) authorized software allowlisting)
+  CM-10: Software Usage Restrictions
+  CM-11: User-Installed Software
+  SI-3: Malicious Code Protection
+  SI-7: Software, Firmware and Information Integrity
+  RA-5: Vulnerability Monitoring and Scanning
+  SR-3: Supply Chain Controls and Processes
+  SR-6: Supplier Assessments and Reviews
 
 # Which practices each analysis check provides evidence for.
 checks:
-  signature:        [SI.L2-3.14.2, CM.L2-3.4.8]
-  malware_scan:     [SI.L2-3.14.2]
-  known_exploited:  [SI.L2-3.14.1, RA.L2-3.11.2]
-  cve_exposure:     [RA.L2-3.11.2, SI.L2-3.14.1]
+  signature:        [SI.L2-3.14.2, CM.L2-3.4.8, SI-7, SR-3]
+  malware_scan:     [SI.L2-3.14.2, SI-3]
+  known_exploited:  [SI.L2-3.14.1, RA.L2-3.11.2, RA-5]
+  cve_exposure:     [RA.L2-3.11.2, SI.L2-3.14.1, RA-5]
   end_of_life:      [SI.L2-3.14.1]
-  baseline:         [CM.L2-3.4.8]
-  user_installed:   [CM.L2-3.4.9]
-  functionality:    [CM.L2-3.4.6, CM.L2-3.4.7]
-  remote_access:    [AC.L2-3.1.12, CM.L2-3.4.7]
+  baseline:         [CM.L2-3.4.8, CM-7, CM-10]
+  user_installed:   [CM.L2-3.4.9, CM-11]
+  functionality:    [CM.L2-3.4.6, CM.L2-3.4.7, CM-7]
+  remote_access:    [AC.L2-3.1.12, CM.L2-3.4.7, CM-7]
   privileged_binary: [AC.L2-3.1.7, AC.L2-3.1.5]
   scope:            [AC.L2-3.1.5]
   device_posture:   [SI.L2-3.14.1, SI.L2-3.14.2]
-  change_record:    [CM.L2-3.4.3, CM.L2-3.4.4, AU.L2-3.3.1]
+  change_record:    [CM.L2-3.4.3, CM.L2-3.4.4, RA.L2-3.11.1, AU.L2-3.3.1]
