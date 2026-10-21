@@ -29,6 +29,7 @@ param(
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
+$fieldFailed = $false
 
 $Primary = 'eMudhra|emSigner|eSigner|e-Mudhra'
 $Related = 'ProxKey|Watchdata|WD ?Proxkey|ePass2003|ePass ?3003|FEITIAN'
@@ -150,13 +151,47 @@ $status = if ($confirmed.Count) { 'DETECTED' } elseif ($related.Count) { 'RELATE
 Write-Output "eMudhra detection on $env:COMPUTERNAME : $status (Confirmed: $($confirmed.Count), Related: $($related.Count))"
 if ($results) { $results | Format-Table -AutoSize -Wrap | Out-String -Width 4096 | Write-Output }
 
-if ($CustomFieldName) {
-    $summary = "$status | $(Get-Date -Format 'yyyy-MM-dd HH:mm') | " +
-               (($results | ForEach-Object { "[$($_.Confidence)] $($_.Category): $($_.Name)" }) -join '; ')
-    if ($summary.Length -gt 9000) { $summary = $summary.Substring(0, 9000) + '...' }
-    try { Ninja-Property-Set $CustomFieldName $summary; Write-Output "Wrote result to custom field '$CustomFieldName'." }
-    catch { Write-Output "WARNING: Could not write custom field '$CustomFieldName': $($_.Exception.Message)" }
+if ($CustomFieldName) { $CustomFieldName = $CustomFieldName.Trim() }
+if (-not $CustomFieldName) {
+    Write-Output "Custom field: not written (no 'customFieldName' script variable was passed to the script)."
+} else {
+    $lines = @("$status | $env:COMPUTERNAME | $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
+    $lines += $results | ForEach-Object { "[$($_.Confidence)] $($_.Category): $($_.Name)" }
+    $summary = $lines -join "`n"
+    if ($summary.Length -gt 9000) { $summary = $summary.Substring(0, 9000) + "`n..." }
+
+    # Ninja's cmdlets report failures as output text, not exceptions, so capture everything and verify by reading back.
+    $ErrorActionPreference = 'Continue'
+    $written = $false
+    $log = @()
+
+    if (Get-Command Ninja-Property-Set-Piped -ErrorAction SilentlyContinue) {
+        $log += ($summary | Ninja-Property-Set-Piped $CustomFieldName 2>&1 | Out-String).Trim()
+        $readBack = (Ninja-Property-Get $CustomFieldName 2>&1 | Out-String).Trim()
+        $written = $readBack -like "$status*"
+    }
+
+    if (-not $written) {
+        $cli = Join-Path $env:ProgramData 'NinjaRMMAgent\ninjarmm-cli.exe'
+        if (Test-Path $cli) {
+            $log += (& $cli set $CustomFieldName $summary 2>&1 | Out-String).Trim()
+            $readBack = (& $cli get $CustomFieldName 2>&1 | Out-String).Trim()
+            $written = $readBack -like "$status*"
+        } else {
+            $log += "ninjarmm-cli.exe not found at $cli"
+        }
+    }
+
+    if ($written) {
+        Write-Output "Custom field '$CustomFieldName' updated and verified."
+    } else {
+        Write-Output "ERROR: Custom field '$CustomFieldName' was NOT updated. Ninja returned:"
+        $log | Where-Object { $_ } | ForEach-Object { Write-Output "  $_" }
+        Write-Output "  Check: the field name matches exactly (case-sensitive), Scripts permission is Read/Write, and the field applies to this device's role."
+        $fieldFailed = $true
+    }
 }
 
 if ($ExitOnDetect -eq 'true' -and $confirmed.Count) { exit 1 }
+if ($fieldFailed) { exit 2 }
 exit 0
