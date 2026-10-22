@@ -17,7 +17,7 @@ Scripts and tooling.
 
 ## cross-platform/
 
-- `test-emudhra-g3.sh` (macOS / any Linux, POSIX sh) and `Test-EmudhraG3.ps1` (Windows PowerShell 5.1 / 7) – the equivalent of `curl -sS https://dv-g3b-emudhra.we-have-a-problem.com/ ; echo "exit=$?"` on each OS, using the OS trust store. Prints the output, `exit=N` and a verdict: a TLS/cert failure (curl 35/51/58/60/77) is **OK** (compromised eMudhra G3 chain not trusted), exit 0 is **VULNERABLE**, anything else is **INCONCLUSIVE**. Exits with curl's exit code. Shell version falls back to `wget`; PowerShell calls `curl.exe` explicitly (not the PS 5.1 alias) and falls back to `Invoke-WebRequest`. Optional first argument / `-Url` overrides the test URL.
+- `test-emudhra-g3.sh` (macOS / any Linux, POSIX sh) and `Test-EmudhraG3.ps1` (Windows PowerShell 5.1 / 7) – the equivalent of `curl -sS https://dv-g3b-emudhra.we-have-a-problem.com/ ; echo "exit=$?"` on each OS, using the OS trust store. Prints the output, `exit=N` and a verdict: a TLS/cert failure (curl 35/51/58/60/77) is **OK** (compromised eMudhra G3 chain not trusted), exit 0 is **VULNERABLE**, anything else is **INCONCLUSIVE**. Exits with curl's exit code. Under the NinjaOne agent (Windows `Ninja-Property-Set`, macOS/Linux `ninjarmm-cli`) both write `OK|VULNERABLE|INCONCLUSIVE | exit=N | tool | timestamp` to device text field `emudhraG3Status` (script variable `ninjaField` overrides, `none` disables) and exit by verdict instead (0 OK, 1 VULNERABLE, 2 INCONCLUSIVE) so a pass doesn't show as a failed run. Shell version falls back to `wget`; PowerShell calls `curl.exe` explicitly (not the PS 5.1 alias) and falls back to `Invoke-WebRequest`. Optional first argument / `-Url` overrides the test URL.
 
 ## autoelevate-mcp/
 
