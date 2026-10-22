@@ -14,6 +14,7 @@ Scripts and tooling.
 ## linux/
 
 - `distrust-emudhra-g3.sh` – blocklists the compromised eMudhra trust path (Oct 2026 intermediate key compromise) on RHEL-family hosts that can't get a fixed `ca-certificates` package (e.g. EOL CentOS Stream 8). Blocklists `emSign ECC Root CA - G3` and `EM DV TLS CA - G3B`, SHA-256 fingerprint-checks both before writing, runs `update-ca-trust extract`, then confirms `curl` rejects `dv-g3b-emudhra.we-have-a-problem.com`. Handles RHEL 8 `blacklist` and RHEL 9 `blocklist` dirs; idempotent. `--check` verifies without changing anything. Exit codes: 0 rejected (good), 1 error, 2 applied but still connecting, 3 `--check` vulnerable. Does not cover certifi, Node or Go bundles.
+- `distrust-emudhra-g3-ubuntu.sh` – Ubuntu/Debian equivalent. Finds `emSign ECC Root CA - G3` in `/etc/ca-certificates.conf` by SHA-256 fingerprint, backs up the conf, prefixes the line with `!`, runs `update-ca-certificates --fresh`, then confirms `curl` rejects the test host. Removing the root breaks all G3B/G3C chains, so no intermediate blocklist is needed. Idempotent; no-op if the root is already gone. Exit codes: 0 OK, 1 error, 2 applied but still connecting. Verify afterwards with `cross-platform/test-emudhra-g3.sh`.
 
 ## cross-platform/
 
