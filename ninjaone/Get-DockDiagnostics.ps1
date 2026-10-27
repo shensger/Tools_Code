@@ -36,7 +36,7 @@ $cv   = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion'
 } | Format-List | Out-String -Width 200 | Write-Output
 
 $flight = Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\WindowsSelfHost\Applicability'
-if ($flight.BranchName -or [int]$cv.CurrentBuild -ge 26200) {
+if ($flight.BranchName -or $flight.Ring) {
     Write-Output "!! Insider / pre-release build detected. Branch: '$($flight.BranchName)'  Ring: '$($flight.Ring)'"
     Write-Output "!! OEM Thunderbolt/USB4/dock drivers are frequently broken on Insider builds."
 }
