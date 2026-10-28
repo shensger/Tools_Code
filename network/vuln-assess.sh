@@ -84,16 +84,22 @@ fi
 sort -uV "$TARGETS_FILE" -o "$TARGETS_FILE"
 log "Targets: $(wc -l < "$TARGETS_FILE" | tr -d ' ')  ->  $TARGETS_FILE"
 
-# NSE selection. "vuln" probes for known flaws without weaponizing them.
-# brute/dos/exploit categories are deliberately excluded.
-if [[ $SAFE_ONLY -eq 1 ]]; then NSE="safe"; else NSE="vuln or safe"; fi
-# Service-specific safe scripts worth adding regardless of category.
+# NSE selection.
+# We deliberately do NOT use the broad "safe" category: it pulls in pre-scan
+# broadcast/multicast/targeting scripts (mrinfo, eap-info, lltd-discovery,
+# broadcast-upnp-info, targets-asn, ...) that are irrelevant to assessing
+# known-open ports, are noisy, and — worse — a single crashing pre-scan script
+# aborts the whole run before any host results are written.
+# Instead: the "vuln" category (known-flaw probes, no weaponization) plus a
+# curated set of port-scoped service scripts named explicitly. brute/dos/
+# exploit categories are never included.
 # NOTE: nmap's --script expression joins terms with 'or'/'and', NOT commas,
-# once parentheses/booleans are involved. A comma list can't sit inside an
-# 'or', so every script name here is 'or'-joined.
+# once parentheses/booleans are involved, so every name is 'or'-joined.
 SVC_SCRIPTS="ssh2-enum-algos or ssh-auth-methods or dns-nsid or dns-recursion \
 or http-methods or http-security-headers or http-title or http-headers or http-enum \
 or ssl-cert or ssl-enum-ciphers or ssl-dh-params"
+# -s (safe only): just the curated service scripts. Otherwise add "vuln".
+if [[ $SAFE_ONLY -eq 1 ]]; then SCRIPT_EXPR="$SVC_SCRIPTS"; else SCRIPT_EXPR="(vuln) or ($SVC_SCRIPTS)"; fi
 
 # ---- Per-host assessment ----------------------------------------------------
 while read -r host; do
@@ -106,7 +112,7 @@ while read -r host; do
   log "Assessing $host ${pflag:-(top 1000 ports)}"
   # shellcheck disable=SC2086
   nmap -Pn $SCAN -sV $pflag --open -T4 \
-       --script "($NSE) or ($SVC_SCRIPTS)" \
+       --script "$SCRIPT_EXPR" \
        --script-args "http.useragent=assessment" \
        --host-timeout "$HOST_TIMEOUT" --script-timeout 3m \
        -oA "$OUTDIR/host-$safe" "$host" >>"$LOG" 2>&1 || {
@@ -116,6 +122,12 @@ while read -r host; do
            log "  (nmap returned non-zero for $host; partial results kept)"
          fi
        }
+
+  # Sanity-check: a valid run writes a <host> element. If not, the scan aborted
+  # (crashed script, killed process) — say so rather than silently reporting 0.
+  if ! grep -q '<host' "$OUTDIR/host-$safe.xml" 2>/dev/null; then
+    log "  [!] No host results for $host — scan aborted before writing output (see run.log)."
+  fi
 
   # TLS deep-dive with testssl.sh if available, for any ssl/https port found
   if command -v testssl.sh >/dev/null 2>&1; then
