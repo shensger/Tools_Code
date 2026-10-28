@@ -44,7 +44,11 @@
 .NINJA SCRIPT VARIABLES (all optional)
     targets      same as -Targets (blank = local subnets)
     ports        override the port list
-    ninjaField   device text field for the one-line summary (blank = don't write)
+    ninjaField   Multi-line device custom field for the results (default phpExposure; "none" = don't
+                 write). Create it in Ninja as a Multi-line field with Automations = Read/Write. It gets
+                 a summary line, every PHP finding, and a compact list of every web service scanned
+                 (capped at ~9,500 characters), so results can be pulled across devices without
+                 touching the CSVs.
     outputDir    where reports go (default C:\ProgramData\PHP2ShellScan\<timestamp>)
     pingFirst    "true" = only port-scan hosts that answer ping (faster on big, sparse ranges;
                  misses hosts that block ICMP, which Windows does by default)
@@ -66,7 +70,7 @@ param(
     [string]$Targets          = $env:targets,
     [string]$Ports            = $(if ($env:ports) { $env:ports } else { '80,81,443,591,4443,8000,8008,8080,8081,8088,8443,8888,9000,9443' }),
     [string]$OutputDir        = $env:outputDir,
-    [string]$NinjaField       = $env:ninjaField,
+    [string]$NinjaField       = $(if ($env:ninjaField) { $env:ninjaField } else { 'phpExposure' }),
     [int]   $ConnectTimeoutMs = 800,
     [int]   $HttpTimeoutMs    = 6000,
     [int]   $Threads          = 128,
@@ -81,6 +85,13 @@ $started = Get-Date
 # Fixed releases per branch (https://www.php.net/archive/2026.php#2026-10-21-5)
 $FixedIn = @{ '8.2' = 35; '8.3' = 36; '8.4' = 27; '8.5' = 12 }
 $FixedText = '8.5.12 / 8.4.27 / 8.3.36 / 8.2.35'
+
+function Set-NinjaResult([string]$Value) {
+    if (-not $NinjaField -or $NinjaField -eq 'none') { return }
+    if (-not (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) { return }
+    try { Ninja-Property-Set $NinjaField $Value; Write-Output "Wrote results to custom field '$NinjaField'." }
+    catch { Write-Output "WARNING: could not write custom field '$NinjaField' (create it as a Multi-line field with Automations = Read/Write): $($_.Exception.Message)" }
+}
 
 # ------------------------------------------------------------------------------------------------
 # Network helpers (C# so the scan runs in parallel on both PS 5.1 and PS 7)
@@ -625,18 +636,27 @@ try {
     Write-Output "Reports: $csv"
     Write-Output "         $html"
 
-    if ($NinjaField -and (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) {
-        $state = 'OK'
-        if ($needAction) { $state = 'ACTION' }
-        $val = "$state | $($started.ToString('yyyy-MM-dd HH:mm')) | $($tokens -join ' ') | web $webCount, PHP $phpCount (vuln $($count.VULNERABLE), distro $($count.BELOW_FIX_DISTRO), unsupported $($count.UNSUPPORTED), hidden $($count.PHP_VERSION_UNKNOWN), possible $($count.POSSIBLE_PHP), fpm $($count.REVIEW_FASTCGI)) | $csv"
-        try { Ninja-Property-Set $NinjaField $val; Write-Output "Wrote summary to custom field '$NinjaField'." }
-        catch { Write-Output "WARNING: could not write custom field '$NinjaField': $($_.Exception.Message)" }
-    }
+    $state = 'OK'
+    if ($needAction) { $state = 'ACTION' }
+    $lines = New-Object System.Collections.Generic.List[string]
+    $lines.Add("$state | $($started.ToString('yyyy-MM-dd HH:mm')) | from $([Environment]::MachineName) | scope $($tokens -join ' ') | $($targetMap.Count) addresses, $($liveHosts.Count) with open ports, $webCount web services | PHP $phpCount (vuln $($count.VULNERABLE), distro $($count.BELOW_FIX_DISTRO), unsupported $($count.UNSUPPORTED), hidden $($count.PHP_VERSION_UNKNOWN), patched $($count.PATCHED), possible $($count.POSSIBLE_PHP), fpm $($count.REVIEW_FASTCGI))")
+    $fmt = { param($r) "$($r.Host)$(if ($r.Name -and $r.Name -ne $r.Host) { " ($($r.Name))" }):$($r.Port) | $($r.Status) | PHP $(if ($r.PHPVersion) { $r.PHPVersion } else { '?' }) | $($r.Apps) | $($r.Indicators) | $($r.Url)" }
+    if ($needAction) { $lines.Add('ATTENTION:'); foreach ($r in $needAction) { $lines.Add('  ' + (& $fmt $r)) } }
+    if ($patched)    { $lines.Add('PATCHED:');   foreach ($r in $patched)    { $lines.Add('  ' + (& $fmt $r)) } }
+    $other = @($rows | Where-Object { 'NO_PHP_DETECTED', 'NOT_HTTP' -contains $_.Status } | ForEach-Object {
+        $tag = 'no-php'; if ($_.Status -eq 'NOT_HTTP') { $tag = 'not-http' }
+        "$($_.Host):$($_.Port)=$tag" })
+    if ($other) { $lines.Add('NO PHP: ' + ($other -join ', ')) }
+    $lines.Add("CSV: $csv")
+    $fieldValue = $lines -join "`n"
+    if ($fieldValue.Length -gt 9500) { $fieldValue = $fieldValue.Substring(0, 9450) + "`n...[truncated - see CSV]" }
+    Set-NinjaResult $fieldValue
 
     if ($needAction) { exit 1 }
     exit 0
 }
 catch {
     Write-Output "ERROR: $($_.Exception.Message)"
+    Set-NinjaResult "ERROR | $($started.ToString('yyyy-MM-dd HH:mm')) | from $([Environment]::MachineName) | $($_.Exception.Message)"
     exit 2
 }
