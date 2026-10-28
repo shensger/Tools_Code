@@ -87,10 +87,13 @@ log "Targets: $(wc -l < "$TARGETS_FILE" | tr -d ' ')  ->  $TARGETS_FILE"
 # NSE selection. "vuln" probes for known flaws without weaponizing them.
 # brute/dos/exploit categories are deliberately excluded.
 if [[ $SAFE_ONLY -eq 1 ]]; then NSE="safe"; else NSE="vuln or safe"; fi
-# Service-specific safe scripts worth adding regardless of category:
-SVC_SCRIPTS="ssh2-enum-algos,ssh-auth-methods,dns-nsid,dns-recursion,\
-http-methods,http-security-headers,http-title,http-headers,http-enum,\
-ssl-cert,ssl-enum-ciphers,ssl-dh-params"
+# Service-specific safe scripts worth adding regardless of category.
+# NOTE: nmap's --script expression joins terms with 'or'/'and', NOT commas,
+# once parentheses/booleans are involved. A comma list can't sit inside an
+# 'or', so every script name here is 'or'-joined.
+SVC_SCRIPTS="ssh2-enum-algos or ssh-auth-methods or dns-nsid or dns-recursion \
+or http-methods or http-security-headers or http-title or http-headers or http-enum \
+or ssl-cert or ssl-enum-ciphers or ssl-dh-params"
 
 # ---- Per-host assessment ----------------------------------------------------
 while read -r host; do
@@ -106,7 +109,13 @@ while read -r host; do
        --script "($NSE) or ($SVC_SCRIPTS)" \
        --script-args "http.useragent=assessment" \
        --host-timeout "$HOST_TIMEOUT" --script-timeout 3m \
-       -oA "$OUTDIR/host-$safe" "$host" >>"$LOG" 2>&1 || log "  (nmap returned non-zero for $host; partial results kept)"
+       -oA "$OUTDIR/host-$safe" "$host" >>"$LOG" 2>&1 || {
+         if grep -q 'failed to initialize the script engine' "$LOG"; then
+           log "  [!] NSE engine failed to start — no scripts ran. See run.log; this is a script-expression bug, not a host issue."
+         else
+           log "  (nmap returned non-zero for $host; partial results kept)"
+         fi
+       }
 
   # TLS deep-dive with testssl.sh if available, for any ssl/https port found
   if command -v testssl.sh >/dev/null 2>&1; then
