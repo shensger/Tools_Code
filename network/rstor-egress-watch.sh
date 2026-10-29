@@ -10,7 +10,8 @@
 #   ./rstor-egress-watch.sh logrule           # print iptables/nft rules for persistent kernel logging
 #
 # Env overrides: HOST, BUCKET, LOG, DURATION (sec, 0=forever), IFACE (default any)
-# Needs: conntrack (conntrack-tools); tshark or tcpdump for "sni".
+# Needs: root. Uses conntrack (conntrack-tools) if installed, otherwise reads
+# /proc/net/nf_conntrack directly (no package needed). tshark or tcpdump for "sni".
 # Byte counts need conntrack accounting:  sysctl -w net.netfilter.nf_conntrack_acct=1
 
 set -uo pipefail
@@ -58,25 +59,35 @@ parse_ct='
   print osrc, osp, odst, odp, state, up, down
 }'
 
+# List current tracked TCP flows to one IP, via conntrack or /proc fallback
+ct_list() {
+    if command -v conntrack >/dev/null; then
+        conntrack -L -p tcp -d "$1" 2>/dev/null
+    elif [[ -r /proc/net/nf_conntrack ]]; then
+        grep -E " tcp .* dst=${1//./\\.} " /proc/net/nf_conntrack
+    else
+        die "no conntrack tool and /proc/net/nf_conntrack missing (modprobe nf_conntrack)"
+    fi
+}
+
 case "$MODE" in
 
 snapshot)
-    command -v conntrack >/dev/null || die "install conntrack-tools (apt install conntrack / dnf install conntrack-tools)"
     printf "\n%-16s %-6s %-16s %-5s %-12s %14s %14s\n" SRC SPORT DST DPORT STATE BYTES_UP BYTES_DOWN
     for ip in "${IPS[@]}"; do
-        conntrack -L -p tcp -d "$ip" 2>/dev/null | awk "$parse_ct" \
+        ct_list "$ip" | awk "$parse_ct" \
           | while read -r s sp d dp st up dn; do
                 printf "%-16s %-6s %-16s %-5s %-12s %14s %14s\n" "$s" "$sp" "$d" "$dp" "$st" "$up" "$dn"
             done
     done
     echo
     echo "Hosts with connections now (count):"
-    for ip in "${IPS[@]}"; do conntrack -L -p tcp -d "$ip" 2>/dev/null; done \
+    for ip in "${IPS[@]}"; do ct_list "$ip"; done \
         | awk "$parse_ct" | awk '{print $1}' | sort | uniq -c | sort -rn
     ;;
 
 watch)
-    command -v conntrack >/dev/null || die "install conntrack-tools"
+    INTERVAL="${INTERVAL:-5}"
     echo "[$(ts)] Watching NEW/DESTROY to RStor; logging to $LOG (Ctrl-C to stop)"
     declare -A FIRST LAST CONNS UP
     summary() {
@@ -91,18 +102,48 @@ watch)
     trap summary INT TERM
     [[ "$DURATION" -gt 0 ]] && { sleep "$DURATION"; kill -INT $$; } &
 
-    while read -r line; do
-        grep -qE "dst=($IP_RE) " <<<"$line" || continue
-        evt=$(awk '{gsub(/[\[\]]/,"",$1); print $1}' <<<"$line")
-        read -r s sp d dp st up dn < <(awk "$parse_ct" <<<"$line")
-        now=$(ts)
+    record() {  # evt s sp d dp st up dn
+        local evt=$1 s=$2 sp=$3 d=$4 dp=$5 st=$6 up=$7 dn=$8 now; now=$(ts)
         echo "$now $evt src=$s:$sp dst=$d:$dp state=$st up=$up down=$dn" | tee -a "$LOG"
         [[ -z "${FIRST[$s]:-}" ]] && FIRST[$s]=$now
         LAST[$s]=$now
         [[ "$evt" == NEW ]] && CONNS[$s]=$(( ${CONNS[$s]:-0} + 1 ))
         [[ -z "${CONNS[$s]:-}" ]] && CONNS[$s]=0
         if [[ "$up" =~ ^[0-9]+$ ]] && (( up > ${UP[$s]:-0} )); then UP[$s]=$up; fi
-    done < <(conntrack -E -e NEW,DESTROY -p tcp 2>/dev/null)
+    }
+
+    if command -v conntrack >/dev/null; then
+        # Event mode: catches every connection, even short ones
+        while read -r line; do
+            grep -qE "dst=($IP_RE) " <<<"$line" || continue
+            evt=$(awk '{gsub(/[\[\]]/,"",$1); print $1}' <<<"$line")
+            read -r s sp d dp st up dn < <(awk "$parse_ct" <<<"$line")
+            record "$evt" "$s" "$sp" "$d" "$dp" "$st" "$up" "$dn"
+        done < <(conntrack -E -e NEW,DESTROY -p tcp 2>/dev/null)
+    else
+        # Polling mode via /proc/net/nf_conntrack every $INTERVAL s.
+        # Connections shorter than INTERVAL can be missed; bytes are the last value seen.
+        echo "[$(ts)] conntrack tool not found - polling /proc/net/nf_conntrack every ${INTERVAL}s"
+        declare -A SEEN PREV
+        while true; do
+            declare -A NOWSET=()
+            while read -r s sp d dp st up dn; do
+                [[ -z "$s" ]] && continue
+                k="$s:$sp>$d:$dp"; NOWSET[$k]=1; PREV[$k]="$s $sp $d $dp $st $up $dn"
+                if [[ -z "${SEEN[$k]:-}" ]]; then SEEN[$k]=1; record NEW $s $sp $d $dp $st $up $dn; fi
+                if [[ "$up" =~ ^[0-9]+$ ]] && (( up > ${UP[$s]:-0} )); then UP[$s]=$up; LAST[$s]=$(ts); fi
+            done < <(for ip in "${IPS[@]}"; do ct_list "$ip"; done | awk "$parse_ct")
+            for k in "${!SEEN[@]}"; do
+                if [[ -z "${NOWSET[$k]:-}" ]]; then
+                    read -r s sp d dp st up dn <<<"${PREV[$k]}"
+                    record DESTROY $s $sp $d $dp gone $up $dn
+                    unset "SEEN[$k]" "PREV[$k]"
+                fi
+            done
+            unset NOWSET
+            sleep "$INTERVAL"
+        done
+    fi
     summary
     ;;
 
