@@ -519,7 +519,7 @@ Invoke-Safe 'Events' {
             $rex  = @($ev | Where-Object { $_.ProviderName -eq 'Microsoft-Windows-Resource-Exhaustion-Detector' }).Count
             if ($kp)   { Add-Flag "$kp unexpected shutdown(s) (Kernel-Power 41) in 7 days." }
             if ($disk) { Add-Flag "$disk disk/storage/NTFS error event(s) in 7 days - check drive health." }
-            if ($dumpFail) { Add-Flag "$dumpFail crash dump(s) failed to write (volmgr) in 7 days - no dump to analyze; check dump settings below." }
+            if ($dumpFail) { Add-Flag "$dumpFail crash dump write error(s) (volmgr) in 7 days - see section 8 for whether minidumps were still saved." }
             if ($whea) { Add-Flag "$whea WHEA hardware error event(s) in 7 days." }
             if ($rex)  { Add-Flag "$rex low-virtual-memory (Resource-Exhaustion) event(s) in 7 days." }
         }
@@ -575,6 +575,7 @@ Invoke-Safe 'Crashes' {
     $mem  = Get-Item "$env:SystemRoot\MEMORY.DMP" -Force -ErrorAction SilentlyContinue
     Add-Line "Minidumps       : $(@($mini).Count)$(if ($mini) { "  (newest $($mini[0].Name) $($mini[0].LastWriteTime))" })"
     Add-Line "MEMORY.DMP      : $(if ($mem) { '{0:N1} GB, {1}' -f ($mem.Length / 1GB), $mem.LastWriteTime } else { 'none' })"
+    if ($mini) { Add-Line ("  Analyze: WinDbg > File > Open dump > {0} > !analyze -v (or NirSoft BlueScreenView)" -f $mini[0].FullName) }
     if ($crashes -and -not $mini) { Add-Line '  Note: crashes recorded but no minidumps on disk - set Startup and Recovery > Small memory dump so the next crash can be analyzed.' }
 }
 
