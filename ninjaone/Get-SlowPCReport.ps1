@@ -11,7 +11,8 @@
       4. Disk free space, disk type/health, cleanable folders
       5. Windows Update / Defender / AV scan activity
     Plus extras that commonly explain slowness: power mode, battery wear, thermals,
-    RAM configuration, boot-time degradation and recent system/app errors.
+    RAM configuration, boot-time degradation, recent system/app errors and
+    crashes (bugcheck code + name + likely driver, crash-dump configuration).
 
     READ-ONLY. Makes no changes to the machine.
     Run as Administrator for complete results (Defender, disk reliability, boot log).
@@ -511,11 +512,14 @@ Invoke-Safe 'Events' {
 
         if ($log -eq 'System') {
             $kp   = @($ev | Where-Object { $_.ProviderName -eq 'Microsoft-Windows-Kernel-Power' -and $_.Id -eq 41 }).Count
-            $disk = @($ev | Where-Object { $_.ProviderName -match '^(disk|stornvme|storahci|Ntfs|volmgr)$' -or ($_.ProviderName -eq 'Microsoft-Windows-Ntfs') }).Count
+            # volmgr is excluded on purpose: its errors (45/46/161) are crash-dump failures, not drive faults
+            $disk = @($ev | Where-Object { $_.ProviderName -match '^(disk|stornvme|storahci|Ntfs|Microsoft-Windows-Ntfs)$' }).Count
+            $dumpFail = @($ev | Where-Object { $_.ProviderName -eq 'volmgr' -and $_.Id -in 45, 46, 161 }).Count
             $whea = @($ev | Where-Object { $_.ProviderName -eq 'Microsoft-Windows-WHEA-Logger' }).Count
             $rex  = @($ev | Where-Object { $_.ProviderName -eq 'Microsoft-Windows-Resource-Exhaustion-Detector' }).Count
             if ($kp)   { Add-Flag "$kp unexpected shutdown(s) (Kernel-Power 41) in 7 days." }
             if ($disk) { Add-Flag "$disk disk/storage/NTFS error event(s) in 7 days - check drive health." }
+            if ($dumpFail) { Add-Flag "$dumpFail crash dump(s) failed to write (volmgr) in 7 days - no dump to analyze; check dump settings below." }
             if ($whea) { Add-Flag "$whea WHEA hardware error event(s) in 7 days." }
             if ($rex)  { Add-Flag "$rex low-virtual-memory (Resource-Exhaustion) event(s) in 7 days." }
         }
@@ -524,6 +528,54 @@ Invoke-Safe 'Events' {
             if ($hangs -ge 5) { Add-Flag "$hangs application hang events in 7 days." }
         }
     }
+}
+
+# ---------------------------------------------------------------------------
+# 8. CRASHES (BUGCHECKS) & DUMP CONFIG
+# ---------------------------------------------------------------------------
+Invoke-Safe 'Crashes' {
+    Add-Section '8. CRASHES / BLUE SCREENS (last 30 days)'
+    $bcNames = @{
+        '0x0000000A' = 'IRQL_NOT_LESS_OR_EQUAL (driver)';             '0x0000001E' = 'KMODE_EXCEPTION_NOT_HANDLED (driver)'
+        '0x0000003B' = 'SYSTEM_SERVICE_EXCEPTION (driver/GPU)';       '0x00000050' = 'PAGE_FAULT_IN_NONPAGED_AREA (driver/RAM)'
+        '0x0000007E' = 'SYSTEM_THREAD_EXCEPTION_NOT_HANDLED (driver)'; '0x0000007F' = 'UNEXPECTED_KERNEL_MODE_TRAP (hardware/driver)'
+        '0x0000009F' = 'DRIVER_POWER_STATE_FAILURE (sleep/dock/USB)'; '0x000000D1' = 'DRIVER_IRQL_NOT_LESS_OR_EQUAL (driver, often network)'
+        '0x000000EF' = 'CRITICAL_PROCESS_DIED';                        '0x00000101' = 'CLOCK_WATCHDOG_TIMEOUT (CPU/firmware)'
+        '0x00000116' = 'VIDEO_TDR_FAILURE (GPU driver)';               '0x00000117' = 'VIDEO_TDR_TIMEOUT_DETECTED (GPU driver)'
+        '0x00000124' = 'WHEA_UNCORRECTABLE_ERROR (hardware: CPU/RAM/heat)'; '0x00000133' = 'DPC_WATCHDOG_VIOLATION (driver hogging CPU: NVMe firmware/storage, GPU, USB4/dock)'
+        '0x00000139' = 'KERNEL_SECURITY_CHECK_FAILURE (driver/RAM)';  '0x0000013A' = 'KERNEL_MODE_HEAP_CORRUPTION (driver)'
+        '0x00000154' = 'UNEXPECTED_STORE_EXCEPTION (storage/RAM)';    '0x0000015F' = 'CONNECTED_STANDBY_WATCHDOG_TIMEOUT_LIVEDUMP'
+        '0x000001A8' = 'BUGCODE_NDIS_DRIVER_LIVE_DUMP (network)';     '0x00000193' = 'VIDEO_DXGKRNL_LIVEDUMP (GPU)'
+    }
+    $wer = Get-WinEvent -FilterHashtable @{ LogName = 'System'; ProviderName = 'Microsoft-Windows-WER-SystemErrorReporting'; StartTime = (Get-Date).AddDays(-30) } -MaxEvents 50
+    $crashes = foreach ($e in ($wer | Where-Object Id -eq 1001)) {
+        $code = if ($e.Message -match 'bugcheck was:\s*(0x[0-9a-fA-F]+)') { '0x{0:X8}' -f [Convert]::ToUInt32($matches[1], 16) } else { '?' }
+        $parm = if ($e.Message -match 'bugcheck was:\s*0x[0-9a-fA-F]+\s*\(([^)]*)\)') { $matches[1] } else { '' }
+        [pscustomobject]@{ Time = $e.TimeCreated; Code = $code; Name = $bcNames[$code]; Params = Limit-Text $parm 90 }
+    }
+    $drivers = foreach ($e in ($wer | Where-Object Id -eq 1019)) {
+        if ($e.Message -match 'related driver:\s*(\S+?)\.?\s*$') { $matches[1] }
+    }
+    Add-Table $crashes
+    if ($drivers) { Add-Line "Possibly related driver(s) reported by Windows: $(($drivers | Sort-Object -Unique) -join ', ')  (ntoskrnl.exe = Windows couldn't identify the driver)" }
+
+    foreach ($g in ($crashes | Group-Object Code)) {
+        $nm = $bcNames[$g.Name]; if (-not $nm) { $nm = 'see Microsoft bug check reference' }
+        $drv = ($drivers | Where-Object { $_ -ne 'ntoskrnl.exe' } | Sort-Object -Unique) -join ', '
+        Add-Flag ("{0} crash(es) with bugcheck {1} {2}{3}" -f $g.Count, $g.Name, $nm, $(if ($drv) { " - possibly related driver: $drv" } else { '' }))
+    }
+
+    Add-Sub 'Crash dump configuration'
+    $cc = Get-ItemProperty 'HKLM:\SYSTEM\CurrentControlSet\Control\CrashControl'
+    $dumpType = @{ 0 = 'None'; 1 = 'Complete'; 2 = 'Kernel'; 3 = 'Small (minidump)'; 7 = 'Automatic' }[[int]$cc.CrashDumpEnabled]
+    Add-Line "Dump type       : $dumpType ($($cc.CrashDumpEnabled))"
+    Add-Line "Dump file       : $($cc.DumpFile)   Minidump dir: $($cc.MinidumpDir)"
+    Add-Line "Overwrite       : $($cc.Overwrite)   AlwaysKeepMemoryDump: $($cc.AlwaysKeepMemoryDump)   DedicatedDumpFile: $($cc.DedicatedDumpFile)"
+    $mini = Get-ChildItem "$env:SystemRoot\Minidump" -Filter *.dmp -ErrorAction SilentlyContinue | Sort-Object LastWriteTime -Descending
+    $mem  = Get-Item "$env:SystemRoot\MEMORY.DMP" -Force -ErrorAction SilentlyContinue
+    Add-Line "Minidumps       : $(@($mini).Count)$(if ($mini) { "  (newest $($mini[0].Name) $($mini[0].LastWriteTime))" })"
+    Add-Line "MEMORY.DMP      : $(if ($mem) { '{0:N1} GB, {1}' -f ($mem.Length / 1GB), $mem.LastWriteTime } else { 'none' })"
+    if ($crashes -and -not $mini) { Add-Line '  Note: crashes recorded but no minidumps on disk - set Startup and Recovery > Small memory dump so the next crash can be analyzed.' }
 }
 
 # ---------------------------------------------------------------------------
