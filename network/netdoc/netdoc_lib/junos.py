@@ -323,6 +323,11 @@ def _handle_ro(dev, r, inst):
             rt["type"] = rest[0]
         elif rest[0] == "next-table":
             rt["type"], rt["next_hop"] = "next-table", rest[1]
+        elif rest[0] == "resolve":
+            for e in dev["static_routes"]:
+                if e["prefix"] == pfx and e["instance"] == inst:
+                    e["resolve"] = True
+            return
         elif rest[0] == "preference":
             # preference applies to an existing route entry
             for e in dev["static_routes"]:

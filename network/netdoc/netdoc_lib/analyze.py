@@ -19,7 +19,8 @@ def _files(paths):
         if os.path.isdir(p):
             for root, _, names in os.walk(p):
                 for n in sorted(names):
-                    if not n.startswith("."):
+                    if not n.startswith(".") and n != "collect.log" and not n.endswith(".err") \
+                            and os.path.getsize(os.path.join(root, n)) > 0:
                         yield os.path.join(root, n)
         elif os.path.isfile(p):
             yield p
@@ -47,14 +48,20 @@ def load(paths):
     alias = {}
 
     def add_device(dev, key, src):
+        dev["notes"] = set(dev["notes"])
         host = dev["hostname"] or key
+        if re.fullmatch(r"\d{1,3}(\.\d{1,3}){3}", host) and key and not re.fullmatch(r"[\d.]+", key):
+            dev["configured_hostname"] = host
+            dev["notes"].add(f"Configured host-name is an IP address ({host}); labelled by its SSH alias '{key}'.")
+            host = key
+            dev.setdefault("extra_aliases", []).append(dev["configured_hostname"])
         dev["hostname"] = host
         k = short_host(host)
         if k in devices:
             existing = devices[k]
-            existing["notes"].append(f"Duplicate config for {host} in {src}; first one kept.")
+            existing["notes"].add(f"Duplicate config for {host} in {src}; first one kept.")
             return existing
-        dev["aliases"] = {short_host(key), k}
+        dev["aliases"] = {short_host(key), k} | {short_host(a) for a in dev.get("extra_aliases", [])}
         devices[k] = dev
         for a in dev["aliases"]:
             alias[a] = k
@@ -399,6 +406,7 @@ def analyze(devices):
                 ii = iface_net(c)
                 if ii:
                     conn[inst].append((ii.network, unit_name(itf, u)))
+        unres = defaultdict(list)
         for rt in d["static_routes"]:
             nh = rt["next_hop"]
             rt["resolves_via"] = ""
@@ -411,13 +419,26 @@ def analyze(devices):
                 if devitf and not devitf["units"].get("0", {}).get("inet"):
                     rt["resolves_via"] = f"{rt['device']} (no IP; tunnel/DHCP)"
                     continue
+            if rt.get("resolve"):
+                rt["resolves_via"] = "recursive (resolve)"
+                continue
             hit = [n for net, n in conn[rt["instance"]] if nh_ip in net]
             if hit:
                 rt["resolves_via"] = hit[0]
             elif str(nh_ip) != "0.0.0.0":
                 rt["resolves_via"] = "NOT CONNECTED"
-                find("Medium", "Routing", H, rt["prefix"], f"Static route {rt['prefix']} via {nh} ({rt['instance']}): next-hop is not on a connected subnet.",
-                     "Confirm the next-hop (typo, moved subnet, or recursive route via `resolve`).", "config")
+                unres[(rt["instance"], nh)].append(rt["prefix"])
+        for (inst, nh), pfx in sorted(unres.items()):
+            shown = ", ".join(pfx[:12]) + (f" ... (+{len(pfx) - 12} more)" if len(pfx) > 12 else "")
+            if d["platform"] == "junos":
+                txt = (f"{len(pfx)} static route(s) via {nh} ({inst}) have a next hop that is not on a connected subnet "
+                       f"and no `resolve`, so Junos will not install them: {shown}.")
+                rec = (f"Verify with `show route <prefix> exact`. Fix the next hop, add `resolve` if a recursive next hop is intended, "
+                       f"or delete the dead routes.")
+            else:
+                txt = f"{len(pfx)} static route(s) via {nh} ({inst}) have a next hop that is not on a connected subnet: {shown}."
+                rec = "Confirm the gateway and egress interface; the routes will not be usable until the gateway is reachable."
+            find("Medium", "Routing", H, f"next-hop {nh}", txt, rec, "config")
 
         # BGP
         for (inst, ip), n in d["bgp"]["neighbors"].items():
@@ -448,6 +469,10 @@ def analyze(devices):
             find("Low", "Documentation", H, ", ".join(nodesc[:12]) + (" ..." if len(nodesc) > 12 else ""),
                  f"{len(nodesc)} interface(s) with an LLDP neighbor have no description.",
                  "Add descriptions naming the far-end device and port.", "LLDP")
+
+        if d.get("configured_hostname"):
+            find("Low", "Documentation", H, "host-name", f"host-name is set to an IP address ({d['configured_hostname']}); LLDP neighbors, syslog and the SIEM see an IP instead of a name.",
+                 f"Set `system host-name` to a real name (e.g. {H}).", "config")
 
         # Services
         if d["platform"] in ("junos", "fortios") and d["interfaces"]:

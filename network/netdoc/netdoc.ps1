@@ -26,6 +26,9 @@ if (-not $Captures) {
   & (Join-Path $here 'collect.ps1') -Junos $Junos -FortiGate $FortiGate -OutDir $Captures
 }
 if (-not (Test-Path $Captures)) { throw "Captures folder not found: $Captures" }
+if (-not (Get-ChildItem $Captures -File | Where-Object { $_.Name -ne 'collect.log' -and $_.Name -notlike '*.err' -and $_.Length -gt 200 })) {
+  throw "Nothing was collected in $Captures - check collect.log (VPN connected? SSH key loaded?)."
+}
 
 $out = Join-Path $Root "output\$Site\$stamp"
 if (-not $Title) { $Title = "$((Get-Culture).TextInfo.ToTitleCase($Site)) Network Infrastructure Documentation" }
