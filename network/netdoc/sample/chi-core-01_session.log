@@ -1,0 +1,32 @@
+shensger@chi-core-01> show lldp neighbors
+Local Interface    Parent Interface    Chassis Id          Port info          System Name
+xe-0/0/48          ae0                 54:4b:8c:aa:bb:01   xe-0/0/48          chi-dist-01
+xe-0/0/49          ae0                 54:4b:8c:aa:bb:01   xe-0/0/49          chi-dist-01
+xe-0/0/50          ae1                 70:4c:a5:11:22:33   port2              chi-fw-01
+
+shensger@chi-core-01> show bgp summary
+Threading mode: BGP I/O
+Groups: 2 Peers: 2 Down peers: 1
+Table          Tot Paths  Act Paths Suppressed    History Damp State    Pending
+inet.0
+                      12         10          0          0          0          0
+Peer                     AS      InPkt     OutPkt    OutQ   Flaps Last Up/Dwn State|#Active/Received/Accepted/Damped...
+10.255.0.2            65010      48211      48200       0       0 2w3d4h Establ
+  inet.0: 10/12/12/0
+192.168.255.2         12076          0          0       0       3     4:12:09 Active
+
+shensger@chi-core-01> show interfaces terse
+Interface               Admin Link Proto    Local                 Remote
+xe-0/0/48               up    up
+xe-0/0/48.0             up    up   aenet    --> ae0.0
+xe-0/0/49               up    down
+xe-0/0/50               up    up
+xe-0/0/51               up    down
+et-0/0/52               up    up
+et-0/0/52.0             up    up   inet     192.168.255.1/30
+ae0                     up    up
+ae1                     up    up
+irb                     up    up
+irb.10                  up    up   inet     10.10.10.1/24
+
+shensger@chi-core-01> 

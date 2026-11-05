@@ -1,0 +1,12 @@
+== [onboard]
+	==[port1]
+		mode: static
+		ip: 203.0.113.10 255.255.255.248
+		ipv6: ::/0
+		status: up
+		speed: 1000Mbps (Duplex: full)
+	==[port2]
+		mode: static
+		ip: 0.0.0.0 0.0.0.0
+		status: up
+		speed: 10000Mbps (Duplex: full)

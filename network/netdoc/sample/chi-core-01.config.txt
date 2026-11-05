@@ -1,0 +1,53 @@
+## Last commit: 2026-10-30 14:02:11 CDT by shensger
+set version 22.4R3-S2.11
+set system host-name chi-core-01
+set system root-authentication encrypted-password "$6$abcdefgh"
+set system ntp server 10.10.10.5
+set system syslog host 10.10.10.20 any any
+set chassis aggregated-devices ethernet device-count 2
+set interfaces xe-0/0/48 description "chi-dist-01 xe-0/0/48"
+set interfaces xe-0/0/48 ether-options 802.3ad ae0
+set interfaces xe-0/0/49 description "chi-dist-01 xe-0/0/49"
+set interfaces xe-0/0/49 ether-options 802.3ad ae0
+set interfaces xe-0/0/50 description "chi-fw-01 port2"
+set interfaces xe-0/0/50 ether-options 802.3ad ae1
+set interfaces xe-0/0/51 description "spare uplink"
+set interfaces et-0/0/52 description "ExpressRoute MSEE primary"
+set interfaces et-0/0/52 unit 0 family inet address 192.168.255.1/30
+set interfaces ae0 description "chi-dist-01 ae0"
+set interfaces ae0 aggregated-ether-options lacp active
+set interfaces ae0 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae0 unit 0 family ethernet-switching vlan members [ USERS SERVERS 199 STOR-220 ]
+set interfaces ae1 description "chi-fw-01"
+set interfaces ae1 aggregated-ether-options lacp active
+set interfaces ae1 unit 0 family ethernet-switching interface-mode trunk
+set interfaces ae1 unit 0 family ethernet-switching vlan members USERS
+set interfaces ae1 unit 0 family ethernet-switching vlan members SERVERS
+set interfaces ae1 unit 0 family ethernet-switching vlan members FW-TRANSIT
+set interfaces irb unit 10 family inet address 10.10.10.1/24
+set interfaces irb unit 20 family inet address 10.10.20.1/24
+set interfaces irb unit 100 family inet address 10.0.0.2/29
+set interfaces irb unit 220 family inet address 10.10.220.1/24
+set interfaces lo0 unit 0 family inet address 10.255.0.1/32
+set interfaces em0 unit 0 family inet address 172.16.0.11/24
+set vlans USERS vlan-id 10
+set vlans USERS l3-interface irb.10
+set vlans SERVERS vlan-id 20
+set vlans SERVERS l3-interface irb.20
+set vlans VLAN199 vlan-id 199
+set vlans VLAN199 l3-interface irb.199
+set vlans FW-TRANSIT vlan-id 100
+set vlans FW-TRANSIT l3-interface irb.100
+set vlans STOR-220 vlan-id 220
+set vlans STOR-220 l3-interface irb.220
+set routing-options router-id 10.255.0.1
+set routing-options autonomous-system 65010
+set routing-options static route 0.0.0.0/0 next-hop 10.0.0.1
+set routing-options static route 10.50.0.0/16 next-hop 10.9.9.9
+set protocols bgp group EXPRESSROUTE type external
+set protocols bgp group EXPRESSROUTE peer-as 12076
+set protocols bgp group EXPRESSROUTE neighbor 192.168.255.2 description "MSEE primary"
+set protocols bgp group IBGP type internal
+set protocols bgp group IBGP local-address 10.255.0.1
+set protocols bgp group IBGP neighbor 10.255.0.2
+set protocols lldp interface all
