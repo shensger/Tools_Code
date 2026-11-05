@@ -4,7 +4,14 @@ Builds network documentation from Juniper (Junos QFX/EX) and FortiGate (FortiOS)
 
 Read-only: it only parses files. Secrets in configs are dropped and never written to outputs.
 
-## Collect (jump box, read-only)
+## One command (jump box)
+```powershell
+C:\netdoc\repo\network\netdoc\netdoc.ps1 -Site chicago -Junos chi-core,cho-stor -FortiGate yb-nat
+C:\netdoc\repo\network\netdoc\netdoc.ps1 -Site slc -Captures C:\netdoc\captures\slc\from-kim   # supplied files, no SSH
+```
+Captures go to `C:\netdoc\captures\<site>\<stamp>`, outputs to `C:\netdoc\output\<site>\<stamp>`. Update with `git -C C:\netdoc\repo pull`.
+
+## Collect only (read-only)
 ```powershell
 .\collect.ps1 -Junos chi-core-01,chi-dist-01 -FortiGate chi-fw-01 -OutDir C:\netdoc\chicago\2026-11-04
 ```

@@ -28,6 +28,11 @@ from netdoc_lib import outputs as O  # noqa: E402
 
 
 def main():
+    for stream in (sys.stdout, sys.stderr):
+        try:
+            stream.reconfigure(encoding="utf-8", errors="replace")
+        except AttributeError:
+            pass
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("inputs", nargs="+")
     ap.add_argument("-o", "--out", required=True)
@@ -78,9 +83,9 @@ def main():
     O.write_csvs(T, os.path.join(args.out, "tables"))
     O.write_report(T, model, meta, os.path.join(args.out, "report.md"))
     import json
-    with open(os.path.join(args.out, "topology.json"), "w") as f:
+    with open(os.path.join(args.out, "topology.json"), "w", encoding="utf-8") as f:
         json.dump(topo, f, indent=1)
-    with open(os.path.join(args.out, "topology.mmd"), "w") as f:
+    with open(os.path.join(args.out, "topology.mmd"), "w", encoding="utf-8") as f:
         f.write(O.mermaid(topo))
     O.write_model_json(model, os.path.join(args.out, "model.json"))
 

@@ -35,9 +35,11 @@ def _prefix(path):
 def _read(path):
     with open(path, "rb") as f:
         data = f.read()
+    if data[:2] in (b"\xff\xfe", b"\xfe\xff"):
+        data = data.decode("utf-16", errors="replace").encode("utf-8")
     if b"\x00" in data[:2000]:
         return None
-    return data.decode("utf-8", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
+    return data.decode("utf-8-sig", errors="replace").replace("\r\n", "\n").replace("\r", "\n")
 
 
 def load(paths):
