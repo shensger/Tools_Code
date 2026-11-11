@@ -52,3 +52,7 @@ Scripts and tooling.
 ## autoelevate-mcp/
 
 - MCP server for AutoElevate (CyberFOX) built on the admin portal's internal API. `ae_analyze_request` runs a CMMC Level 2 / NIST 800-171 Rev 2 pre-approval analysis on an elevation request (signature, VirusTotal, CISA KEV + NVD for the exact version, EOL, client software baseline, restricted categories, shells/LOLBins, device posture) and returns a verdict plus a ConnectWise note. `ae_decide_request` approves/denies only with confirmation, a fresh analysis, and a recorded override reason when going against the verdict. `ae_audit_rules` flags risky existing rules. See `autoelevate-mcp/README.md`.
+
+## ninjaone-mcp/
+
+- MCP server for NinjaOne RMM (TypeScript, stdio) with 65 tools: devices, hardware/software inventory, patching, fleet-wide queries, groups, organizations, policies, alerts, scripts/jobs and tickets. Install guide in `ninjaone-mcp/SETUP.md`; `ninjaone-mcp/CLAUDE_BUILD.md` is a brief you can hand to Claude to install it on an end user's machine.
