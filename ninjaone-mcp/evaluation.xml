@@ -1,0 +1,58 @@
+<!--
+  NOTE: These are usage-pattern examples, not a verified evaluation suite — answers depend on
+  live data in your NinjaOne tenant, so they describe the expected tool-call flow rather than a
+  fixed, string-comparable answer (the mcp-builder evaluation format wants the latter, verified
+  against real read-only exploration first). Treat this file as a smoke-test script / usage guide;
+  regenerate it properly against your own tenant if you want a true eval suite.
+-->
+<evaluation>
+  <qa_pair>
+    <question>List all organizations in NinjaOne and tell me how many there are. Then get the details for the first organization in the list.</question>
+    <answer>Requires calling ninjaone_list_organizations, then ninjaone_get_organization with the first result's ID.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Find all offline devices across all organizations and report their names, IDs, and last contact time.</question>
+    <answer>Requires calling ninjaone_list_devices (or ninjaone_list_devices_detailed) with device_filter="offline = true" and formatting displayName, id, and lastContact from the results.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Show me all active alerts with CRITICAL severity, including the device ID and when each was triggered.</question>
+    <answer>Requires calling ninjaone_list_alerts and filtering the returned entries where severity is CRITICAL (no server-side severity filter on this endpoint), reporting deviceId and triggeredAt for each.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Find out what scripts or actions can be run on device 42, then run the first PowerShell-language one you find on that device.</question>
+    <answer>Requires calling ninjaone_get_device_scripting_options with device_id=42, finding an entry with language="POWERSHELL", then calling ninjaone_run_script_or_action with device_id=42, kind="SCRIPT" (or "ACTION"), and that entry's id/uid.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>List all Windows services on device 100 that are currently stopped, and show their display names and start types.</question>
+    <answer>Requires calling ninjaone_get_device_services with device_id=100 and state="STOPPED", then displaying displayName and startType for each result.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Create a CRITICAL-severity ticket titled "Server Down - Production DB" for organization (client) ID 5, then immediately update it with an internal comment saying "Investigating now - escalated to senior engineer".</question>
+    <answer>Requires calling ninjaone_create_ticket with summary="Server Down - Production DB", severity="CRITICAL", client_id=5, then ninjaone_update_ticket with the returned ticket_id, comment="Investigating now - escalated to senior engineer", comment_public=false.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Query the software inventory for organization 3 and find all devices that have "Chrome" installed. List each device ID and the Chrome version found.</question>
+    <answer>Requires calling ninjaone_query_software with device_filter="organization = 3" and name="Chrome" (client-side name filter), then listing deviceId and version from the results.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Find the ticket boards available, then search board 1 for all OPEN tickets belonging to client 7, and report how many were found.</question>
+    <answer>Requires calling ninjaone_list_ticket_boards to confirm board 1 exists, then ninjaone_search_tickets with board_id=1, status="OPEN", client_id=7, and counting the returned tickets.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Show the OS patch compliance status for organization 2 — specifically list all patches with FAILED status, grouped by severity (CRITICAL first).</question>
+    <answer>Requires calling ninjaone_query_os_patches with device_filter="organization = 2" and status="FAILED", then sorting/grouping the results by severity with CRITICAL first.</answer>
+  </qa_pair>
+
+  <qa_pair>
+    <question>Get the full activity log for device 55 and summarize the last 5 activities, including the action type, status, and timestamp of each.</question>
+    <answer>Requires calling ninjaone_get_device_activities with device_id=55 and page_size=5, then displaying type, status, and created timestamp for each activity entry.</answer>
+  </qa_pair>
+</evaluation>
