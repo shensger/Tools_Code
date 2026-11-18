@@ -241,7 +241,8 @@ analyze() {
     [ -n "$jc" ] && jc="$jc,"
     jc="$jc{\"cve\":\"$cve\",\"status\":\"$(json_esc "$status")\",\"detail\":\"$(json_esc "$detail")\"}"
   done
-  [ -n "$notes" ] && [ $rank -lt 1 ] && rank=1
+  # only "upgraded but not restarted" / "not executable" notes force a review on their own
+  case "$notes" in *"NOT restarted"*|*"not executable"*) [ $rank -lt 1 ] && rank=1 ;; esac
 
   local verdict="CLEAN"; [ $rank -eq 1 ] && verdict="REVIEW"; [ $rank -eq 2 ] && verdict="VULNERABLE"
   log "\n RESULT      : $verdict"
@@ -251,6 +252,8 @@ analyze() {
   fi
   [ $rank -gt $RANK ] && RANK=$rank
   local ors=""; [ -n "$openresty" ] && ors=" (openresty $openresty)"
+  case "$notes" in *"Not running"*) ors="$ors [not running]" ;; esac
+  case "$notes" in *"did not execute"*) ors="$ors [ver from file]" ;; esac
   SUMMARY[$NSUM]="$verdict | $label | ${ver:-?}${plus:+ $plus}$ors"
   JSON_ITEMS[$NSUM]="{\"target\":\"$(json_esc "$label")\",\"version\":\"${ver:-}\",\"plus\":\"$(json_esc "$plus")\",\"verdict\":\"$verdict\",\"notes\":\"$(json_esc "$notes")\",\"cves\":[$jc]}"
   NSUM=$((NSUM+1))
@@ -319,8 +322,26 @@ while [ $i -lt $NB ]; do
     analyze "host:$rp" "" "" "" "PKG:unknown" "${note:-binary not executable/present}"; i=$((i+1)); continue
   fi
   vout=$(run_as "$u" 15 "$rp" -v 2>&1); Vout=$(run_as "$u" 15 "$rp" -V 2>&1)
-  # search hits that are not actually nginx (wrapper scripts, other tools) are skipped
-  if [ "${B_FOUND[$i]}" = "1" ] && ! echo "$vout" | grep -qE 'nginx/|openresty/'; then i=$((i+1)); continue; fi
+  if ! echo "$vout" | grep -qE 'nginx version:|openresty/'; then
+    # Binary would not run (app-bundled helpers often need the app's own libs / launcher,
+    # or are wrong-arch). nginx embeds "nginx/X.Y.Z" and its configure line in the binary,
+    # so read them from the file itself.
+    sver=$(grep -aoE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' "$rp" 2>/dev/null | head -n1)
+    if [ -z "$sver" ]; then
+      # search hits that are not actually nginx (wrapper scripts, other tools) are skipped
+      [ "${B_FOUND[$i]}" = "1" ] && { i=$((i+1)); continue; }
+    else
+      err=$(echo "$vout" | head -n1 | tr -cd '[:print:]' | cut -c1-120)
+      sconf=$(grep -aoE -- '--(with|without)-[a-z0-9_]+' "$rp" 2>/dev/null | sort -u | tr '\n' ' ')
+      vout="nginx version: $sver"; Vout="nginx version: $sver
+configure arguments: $sconf"
+      note="${note:+$note }Binary did not execute (${err:-no output}); version/modules read from the file."
+    fi
+  fi
+  # app-bundled copies only matter while something runs them
+  if [ "${B_FOUND[$i]}" = "1" ] && ! ps -axo comm= 2>/dev/null | grep -qF "$rp"; then
+    note="${note:+$note }Not running at scan time (bundled inside an app)."
+  fi
   targs=(-T)
   [ -n "${B_PFX[$i]}" ] && targs=("${targs[@]}" -p "${B_PFX[$i]}")
   [ -n "${B_CONF[$i]}" ] && targs=("${targs[@]}" -c "${B_CONF[$i]}")
