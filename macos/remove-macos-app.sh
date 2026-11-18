@@ -18,7 +18,7 @@
 #   or: sudo ./remove-macos-app.sh "Slack"
 
 set -u
-NAME="${appName:-${1:-}}"
+NAME="${appName:-${appname:-${1:-}}}"
 NAME="${NAME%.app}"
 if [ -z "$NAME" ] || [[ "$NAME" == */* ]] || [[ "$NAME" == .* ]]; then
   echo "ERROR: set appName to the app's name, e.g. Slack (no paths)"

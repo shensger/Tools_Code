@@ -30,7 +30,8 @@
 #
 # Usage (NinjaOne runs macOS scripts as root)
 #   sudo ./detect-java4shell-macos.sh [--quick]
-#   NinjaOne script variables (env vars): skipDiskScan (Checkbox), scanPaths
+#   NinjaOne script variables (env vars; NinjaOne lowercases them on macOS, both
+#   spellings are read): skipDiskScan (Checkbox), scanPaths
 #   (String, comma-separated), statusField / detailField (String).
 #
 # Exit codes: 0 = not at risk, 1 = VULNERABLE / VULNERABLE-CPU? / CHECK-VENDOR
@@ -40,10 +41,10 @@
 set -u
 PATH=$PATH:/usr/bin:/bin:/usr/sbin:/sbin
 
-STATUS_FIELD="${statusField:-java4shellStatus}"
-DETAIL_FIELD="${detailField:-java4shellDetail}"
+STATUS_FIELD="${statusField:-${statusfield:-java4shellStatus}}"
+DETAIL_FIELD="${detailField:-${detailfield:-java4shellDetail}}"
 QUICK=0
-[ "${skipDiskScan:-false}" = "true" ] && QUICK=1
+[ "${skipDiskScan:-${skipdiskscan:-false}}" = "true" ] && QUICK=1
 [ "${1:-}" = "--quick" ] && QUICK=1
 
 # ---------------------------------------------------------------------------
@@ -90,7 +91,8 @@ fi
 # ---------------------------------------------------------------------------
 # Find java binaries
 # ---------------------------------------------------------------------------
-if [ -n "${scanPaths:-}" ]; then
+scanPaths="${scanPaths:-${scanpaths:-}}"
+if [ -n "$scanPaths" ]; then
   ROOTS=$(echo "$scanPaths" | tr ',' '\n' | sed 's/^ *//; s/ *$//')
 elif [ "$QUICK" = "1" ]; then
   ROOTS="/Library/Java
