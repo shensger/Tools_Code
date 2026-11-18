@@ -118,6 +118,9 @@ foreach ($exe in $targets.Keys) {
     $conf = Invoke-Nginx $exe $tArgs $t.Prefix
 
     $ver = if ($vOut -match 'nginx/(\d+\.\d+\.\d+)') { [version]$Matches[1] } else { $null }
+    # OpenResty prints openresty/1.27.1.2 - the first three parts are the nginx core version
+    $openresty = ''
+    if (-not $ver -and "$vOut$VOut" -match 'openresty/(\d+\.\d+\.\d+)(\.\d+)?') { $ver = [version]$Matches[1]; $openresty = $Matches[0] }
     $plus = if ("$vOut$VOut" -match '(nginx-plus-r\d+(-p\d+)?)') { $Matches[1] } elseif ("$vOut$VOut" -match 'nginx-plus') { 'nginx-plus' } else { '' }
 
     $h2mod = $VOut -match '--with-http_v2_module'
@@ -188,7 +191,7 @@ foreach ($exe in $targets.Keys) {
                 'CVE-2026-121810' { if ($f.h3 -and $f.up) { $exposed = 1 } elseif (-not $h3mod -and $VOut) { $exposed = -1 } }
                 'CVE-2026-113425' { if ($f.mail -and $f.mailproxy -and $f.authhttp) { $exposed = 1 } elseif (-not $mailmod -and $VOut -and -not $f.mail) { $exposed = -1 } }
             }
-            if ($exposed -eq 1) { $status = if ($inRange -eq 2) { 'VULNERABLE?(Plus)' } else { 'VULNERABLE' }; $rank = 2 }
+            if ($exposed -eq 1) { $status = if ($inRange -eq 2 -and $plus) { 'VULNERABLE?(Plus)' } elseif ($inRange -eq 2) { 'VULNERABLE?(ver unknown)' } else { 'VULNERABLE' }; $rank = 2 }
             elseif ($exposed -eq -1) { $status = 'IN RANGE-not built'; $detail += '; module not compiled in' }
             elseif (-not $confKnown) { $status = 'IN RANGE-cfg unknown'; if ($rank -lt 1) { $rank = 1 } }
             else { $status = 'IN RANGE-not exposed'; $detail += '; vulnerable feature not enabled in config'; if ($rank -lt 1) { $rank = 1 } }
@@ -203,7 +206,7 @@ foreach ($exe in $targets.Keys) {
     Write-Report ('=' * 66)
     Write-Report " $exe$(if ($t.ConfArg) { " (-c $($t.ConfArg))" })"
     Write-Report ('=' * 66)
-    Write-Report " Version     : $(if ($ver) { $ver } else { 'UNKNOWN' })$(if ($plus) { " ($plus)" })"
+    Write-Report " Version     : $(if ($ver) { $ver } else { 'UNKNOWN' })$(if ($plus) { " ($plus)" })$(if ($openresty) { " (nginx core of $openresty)" })"
     if ($t.Note) { Write-Report " NOTE        : $($t.Note)" }
     Write-Report " Build       : http_v2_module=$([int]$h2mod)  http_v3_module=$([int]$h3mod)  mail=$([int]$mailmod)"
     if ($confKnown) {
