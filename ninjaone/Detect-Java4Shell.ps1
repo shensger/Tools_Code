@@ -25,6 +25,7 @@
       CHECK-VENDOR        Vendor build (Temurin/Zulu/Microsoft/etc.) in the affected range; fixed build numbers
                           not yet published for that vendor - confirm against vendor advisory
       NOT-AFFECTED        Version outside affected range or contains the fix
+      NOT-AFFECTED-X86    32-bit (or ARM64) java.exe - bug is x86-64 HotSpot only
 
 .PARAMETER Paths
     Root paths to scan. Default: all fixed drives.
@@ -109,11 +110,24 @@ function Find-JavaExe([string[]]$Roots) {
     return $found
 }
 
+function Get-PEArch([string]$Path) {
+    # Reads the PE header machine type: x86 / x64 / arm64. The bug only exists in x86-64 HotSpot.
+    try {
+        $fs = [IO.File]::OpenRead($Path)
+        try {
+            $br = New-Object IO.BinaryReader($fs)
+            $fs.Position = 0x3C; $pe = $br.ReadInt32()
+            $fs.Position = $pe + 4; $m = $br.ReadUInt16()
+        } finally { $fs.Dispose() }
+        switch ($m) { 0x14C { 'x86' } 0x8664 { 'x64' } 0xAA64 { 'arm64' } default { 'unknown' } }
+    } catch { 'unknown' }
+}
+
 function Get-JavaInfo([string]$JavaExe) {
     $binDir  = Split-Path $JavaExe -Parent
     $jhome   = Split-Path $binDir -Parent
     $release = Join-Path $jhome 'release'
-    $info = [ordered]@{ Path = $JavaExe; Home = $jhome; Vendor = ''; Version = ''; ImplVersion = '' }
+    $info = [ordered]@{ Path = $JavaExe; Home = $jhome; Vendor = ''; Version = ''; ImplVersion = ''; Arch = (Get-PEArch $JavaExe) }
 
     if (Test-Path $release) {
         foreach ($line in Get-Content $release) {
@@ -136,9 +150,12 @@ function Get-JavaInfo([string]$JavaExe) {
         if ($out -match '(Corretto-[\d\.]+)') { $info.ImplVersion = $Matches[1] }
         if ($out -match '-perf') { $info.ImplVersion += ' perf' }
     }
-    if (-not $info.Vendor) {
-        $fvi = (Get-Item $JavaExe).VersionInfo
-        $info.Vendor = $fvi.CompanyName
+    $fvi = (Get-Item $JavaExe).VersionInfo
+    if (-not $info.Vendor) { $info.Vendor = $fvi.CompanyName }
+    if (-not $info.Version) {
+        # Last resort: file version resource (e.g. SAP JVM, where java -version may not run standalone)
+        $fv = if ($fvi.ProductVersion) { $fvi.ProductVersion } else { $fvi.FileVersion }
+        if ($fv -match '(\d+(\.\d+)+)') { $info.Version = $Matches[1] }
     }
     return [pscustomobject]$info
 }
@@ -163,6 +180,20 @@ function Test-CpuVbmi([string[]]$JavaExes) {
         $r = (& $pwsh.Source -NoProfile -Command $check 2>$null | Out-String).Trim()
         if ($r -in 'True', 'False') { return @{ Vbmi = ($r -eq 'True'); Source = 'pwsh .NET intrinsics' } }
     }
+    # 3) CPU model name (used when only Java 8 is present and no .NET 8). Lists AVX-512 VBMI families.
+    $name = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
+    $vbmiRx = @(
+        'Xeon.*(Bronze|Silver|Gold|Platinum)\s+\d[345]\d\d',   # Ice Lake-SP (x3xx), Sapphire (x4xx), Emerald (x5xx)
+        'Xeon\(R\)\s*6\d{3}',                                  # Xeon 6 (Granite Rapids)
+        'Xeon.*\bW-3[3-5]\d\d|Xeon.*\bw[3579]-[23]\d{3}',     # Ice Lake / Sapphire workstation
+        '11th Gen Intel',                                          # Tiger Lake / Rocket Lake
+        'Core\(TM\) i\d-10\d\dG\d',                           # Ice Lake client (10th gen "G")
+        'EPYC\s*(9\d{3}|8\d{3}|4\d{3})',                       # Zen 4/5 EPYC
+        'Ryzen.*\b(7|8|9)\d{3}|Ryzen AI|Threadripper.*(7\d{3}|9\d{3})'  # Zen 4/5 desktop/mobile
+    ) -join '|'
+    if ($name -match 'Apple|ARM|Snapdragon') { return @{ Vbmi = $false; Source = "CPU model ($name)" } }
+    if ($name -match $vbmiRx)                { return @{ Vbmi = $true;  Source = "CPU model heuristic ($name)" } }
+    if ($name -match 'Intel|AMD')            { return @{ Vbmi = $false; Source = "CPU model heuristic ($name)" } }
     return @{ Vbmi = $null; Source = 'unknown' }
 }
 
@@ -181,6 +212,7 @@ function Get-MitigationState {
 
 function Get-Status($rt, $cpu, $mit) {
     $vendorUnknown = $false
+    if ($rt.Arch -in 'x86', 'arm64') { return "NOT-AFFECTED-$($rt.Arch.ToUpper())" }
     $ver = ConvertTo-Version $rt.Version
     if (-not $ver) { return 'UNKNOWN-VERSION' }
 
@@ -256,18 +288,19 @@ $results = foreach ($exe in $javaExes) {
         Status   = Get-Status $rt $cpu $mit
         Version  = if ($rt.ImplVersion) { "$($rt.Version) ($($rt.ImplVersion))" } else { $rt.Version }
         Vendor   = $rt.Vendor
+        Arch     = $rt.Arch
         Running  = $running
         Path     = $rt.Path
     }
 }
 
-$order = 'VULNERABLE', 'VULNERABLE-CPU?', 'CHECK-VENDOR', 'MITIGATED-FLAG', 'AFFECTED-VERSION', 'UNKNOWN-VERSION', 'NOT-AFFECTED'
+$order = 'VULNERABLE', 'VULNERABLE-CPU?', 'CHECK-VENDOR', 'MITIGATED-FLAG', 'AFFECTED-VERSION', 'UNKNOWN-VERSION', 'NOT-AFFECTED-X86', 'NOT-AFFECTED-ARM64', 'NOT-AFFECTED'
 $results = $results | Sort-Object { [array]::IndexOf($order, $_.Status) }, Path
 $results | Format-Table -AutoSize | Out-String -Width 300 | Write-Host
 
 $worst = $results[0].Status
 $counts = ($results | Group-Object Status | ForEach-Object { "$($_.Name)=$($_.Count)" }) -join ', '
-$flagged = $results | Where-Object { $_.Status -ne 'NOT-AFFECTED' } |
+$flagged = $results | Where-Object { $_.Status -notlike 'NOT-AFFECTED*' } |
     ForEach-Object { "$($_.Status): $($_.Vendor) $($_.Version) - $($_.Path)" }
 $summary = "$worst | $counts | VBMI=$($cpu.Vbmi) | $(Get-Date -Format 'yyyy-MM-dd')"
 if ($flagged) { $summary += "`n" + ($flagged -join "`n") }
