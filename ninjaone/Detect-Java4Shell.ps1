@@ -31,7 +31,12 @@
     Root paths to scan. Default: all fixed drives.
 
 .PARAMETER NinjaField
-    NinjaOne custom field (text/multiline) to write the summary to. Omit to skip.
+    NinjaOne text custom field for the one-line status. Default when run by NinjaOne: java4shellStatus
+    (or the 'statusField' script variable).
+
+.PARAMETER NinjaDetailField
+    NinjaOne multi-line custom field for the per-runtime detail. Default when run by NinjaOne:
+    java4shellDetail (or the 'detailField' script variable).
 
 .PARAMETER SkipDiskScan
     Only check running java processes and Program Files paths (fast mode).
@@ -42,6 +47,18 @@
     .\Detect-Java4Shell.ps1 -Paths 'D:\Apps' -SkipDiskScan
 
 .NOTES
+    NINJAONE SETUP
+      1. Administration > Devices > Global (or Role) Custom Fields, create:
+           java4shellStatus  - Text,       Automations: Read/Write, Technician: Read Only
+           java4shellDetail  - Multi-line, Automations: Read/Write, Technician: Read Only
+      2. Administration > Library > Automation > Add new script: language PowerShell, OS Windows,
+         architecture All, Run As System. Paste this file.
+      3. Optional script variables: skipDiskScan (Checkbox), scanPaths (String),
+         statusField / detailField (String) to use different field names.
+      4. Run ad hoc or add to a policy as a scheduled script (daily). Exit code 1 = at risk, so you can
+         alert on script result, or build a device filter / view on java4shellStatus starting with VULNERABLE.
+      A full-disk scan can take several minutes on file servers; raise the script timeout or tick skipDiskScan.
+
     Version fix thresholds from Oracle Nov 2026 CPU / Qualys (2026-11-18). Update $FixedVersions as vendors publish.
     Read-only. No downloads, no changes to the system.
 #>
@@ -49,8 +66,31 @@
 param(
     [string[]]$Paths,
     [string]$NinjaField,
+    [string]$NinjaDetailField,
     [switch]$SkipDiskScan
 )
+
+# NinjaOne script variables arrive as environment variables. They fill in anything not passed as a parameter.
+#   statusField   (String)   - Ninja text field for the one-line status      (default: java4shellStatus)
+#   detailField   (String)   - Ninja multi-line field for per-runtime detail (default: java4shellDetail)
+#   skipDiskScan  (Checkbox) - only scan Program Files / ProgramData + running processes
+#   scanPaths     (String)   - comma-separated root paths, overrides the drive scan
+$RunningInNinja = [bool](Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)
+if (-not $NinjaField)       { $NinjaField       = if ($env:statusField) { $env:statusField } elseif ($RunningInNinja) { 'java4shellStatus' } }
+if (-not $NinjaDetailField) { $NinjaDetailField = if ($env:detailField) { $env:detailField } elseif ($RunningInNinja) { 'java4shellDetail' } }
+if (-not $SkipDiskScan -and $env:skipDiskScan -eq 'true') { $SkipDiskScan = $true }
+if (-not $Paths -and $env:scanPaths) { $Paths = $env:scanPaths -split '\s*,\s*' | Where-Object { $_ } }
+
+function Set-NinjaField([string]$Name, [string]$Value, [int]$MaxLen) {
+    if (-not $Name -or -not $RunningInNinja) { return }
+    if ($Value.Length -gt $MaxLen) { $Value = $Value.Substring(0, $MaxLen - 15) + "`n...(truncated)" }
+    try {
+        Ninja-Property-Set $Name $Value
+        Write-Host "Wrote Ninja field '$Name' ($($Value.Length) chars)"
+    } catch {
+        Write-Host "WARNING: could not write Ninja field '$Name' - check it exists and has Automation write access. $($_.Exception.Message)"
+    }
+}
 
 $ErrorActionPreference = 'SilentlyContinue'
 
@@ -270,18 +310,22 @@ foreach ($p in $mit.Processes) {
 }
 
 $cpuName = (Get-CimInstance Win32_Processor | Select-Object -First 1).Name
+$stamp   = Get-Date -Format 'yyyy-MM-dd HH:mm'
+
 if (-not $javaExes) {
-    $summary = "NOT-AFFECTED: no Java runtimes found | CPU: $cpuName"
-    Write-Host $summary
-    if ($NinjaField -and (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) { Ninja-Property-Set $NinjaField $summary }
+    $status = "NOT-AFFECTED | no Java found | $stamp"
+    Write-Host $status
+    Set-NinjaField $NinjaField $status 200
+    Set-NinjaField $NinjaDetailField "No java.exe found in: $($Paths -join ', ')`nCPU: $cpuName" 9000
     exit 0
 }
 
 $cpu = Test-CpuVbmi $javaExes
-Write-Host ("CPU: {0} | AVX-512 VBMI: {1} (via {2})" -f $cpuName, $(if ($null -eq $cpu.Vbmi) { 'UNKNOWN' } else { $cpu.Vbmi }), $cpu.Source)
+$vbmiText = if ($null -eq $cpu.Vbmi) { 'UNKNOWN' } else { $cpu.Vbmi }
+Write-Host ("CPU: {0} | AVX-512 VBMI: {1} (via {2})" -f $cpuName, $vbmiText, $cpu.Source)
 if ($mit.GlobalHits) { Write-Host "Global mitigation flags found: $($mit.GlobalHits -join '; ')" }
 
-$results = foreach ($exe in $javaExes) {
+$results = @(foreach ($exe in $javaExes) {
     $rt = Get-JavaInfo $exe
     $running = @($mit.Processes | Where-Object { $_.ExecutablePath -eq $exe }).Count
     [pscustomobject]@{
@@ -292,22 +336,28 @@ $results = foreach ($exe in $javaExes) {
         Running  = $running
         Path     = $rt.Path
     }
-}
+})
 
 $order = 'VULNERABLE', 'VULNERABLE-CPU?', 'CHECK-VENDOR', 'MITIGATED-FLAG', 'AFFECTED-VERSION', 'UNKNOWN-VERSION', 'NOT-AFFECTED-X86', 'NOT-AFFECTED-ARM64', 'NOT-AFFECTED'
-$results = $results | Sort-Object { [array]::IndexOf($order, $_.Status) }, Path
+$results = @($results | Sort-Object { [array]::IndexOf($order, $_.Status) }, Path)
 $results | Format-Table -AutoSize | Out-String -Width 300 | Write-Host
 
-$worst = $results[0].Status
-$counts = ($results | Group-Object Status | ForEach-Object { "$($_.Name)=$($_.Count)" }) -join ', '
-$flagged = $results | Where-Object { $_.Status -notlike 'NOT-AFFECTED*' } |
-    ForEach-Object { "$($_.Status): $($_.Vendor) $($_.Version) - $($_.Path)" }
-$summary = "$worst | $counts | VBMI=$($cpu.Vbmi) | $(Get-Date -Format 'yyyy-MM-dd')"
-if ($flagged) { $summary += "`n" + ($flagged -join "`n") }
+$worst   = $results[0].Status
+$overall = if ($worst -like 'NOT-AFFECTED*') { 'NOT-AFFECTED' } else { $worst }
+$atRisk  = @($results | Where-Object { $_.Status -notlike 'NOT-AFFECTED*' }).Count
 
-if ($NinjaField -and (Get-Command Ninja-Property-Set -ErrorAction SilentlyContinue)) {
-    Ninja-Property-Set $NinjaField $summary
-    Write-Host "Wrote summary to Ninja field '$NinjaField'"
+# Status field (text, keep under 200 chars) - easy to filter/sort on in Ninja device views
+$status = "$overall | $atRisk of $($results.Count) runtimes flagged | VBMI=$vbmiText | $stamp"
+
+# Detail field (multi-line) - one line per runtime, flagged ones first
+$detail = @("Scan: $stamp  CPU: $cpuName  AVX-512 VBMI: $vbmiText ($($cpu.Source))")
+if ($mit.GlobalHits) { $detail += "Mitigation env vars: $($mit.GlobalHits -join '; ')" }
+$detail += $results | ForEach-Object {
+    "$($_.Status) | $($_.Vendor) $($_.Version) | $($_.Arch)$(if ($_.Running) { ' | RUNNING' }) | $($_.Path)"
 }
 
-if ($worst -in 'VULNERABLE', 'VULNERABLE-CPU?', 'CHECK-VENDOR') { exit 1 } else { exit 0 }
+Write-Host $status
+Set-NinjaField $NinjaField $status 200
+Set-NinjaField $NinjaDetailField ($detail -join "`n") 9000
+
+if ($overall -in 'VULNERABLE', 'VULNERABLE-CPU?', 'CHECK-VENDOR') { exit 1 } else { exit 0 }
