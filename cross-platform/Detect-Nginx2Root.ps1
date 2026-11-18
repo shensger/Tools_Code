@@ -90,8 +90,12 @@ Get-CimInstance Win32_Service -ErrorAction SilentlyContinue | Where-Object { $_.
 }
 $roots = @('C:\nginx*', 'C:\tools\nginx*', 'C:\opt\nginx*', "$env:ProgramFiles\nginx*", "${env:ProgramFiles(x86)}\nginx*", 'C:\ProgramData\chocolatey\lib\nginx*', 'C:\OpenResty*', 'C:\openresty*')
 foreach ($r in $roots) {
-    Get-ChildItem -Path $r -Filter nginx.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | ForEach-Object {
-        if (-not $targets.ContainsKey($_.FullName)) { $targets[$_.FullName] = @{ ConfArg = ''; Note = '' } }
+    # Resolve the wildcard to real folders first. Get-ChildItem -Path 'C:\nginx*' -Recurse would
+    # otherwise treat 'nginx*' as a name filter and crawl the whole parent (all of C:\).
+    Get-Item -Path $r -ErrorAction SilentlyContinue | Where-Object { $_.PSIsContainer } | ForEach-Object {
+        Get-ChildItem -LiteralPath $_.FullName -Filter nginx.exe -Recurse -Depth 3 -ErrorAction SilentlyContinue | ForEach-Object {
+            if (-not $targets.ContainsKey($_.FullName)) { $targets[$_.FullName] = @{ ConfArg = ''; Note = '' } }
+        }
     }
 }
 if ($DeepScan) {
