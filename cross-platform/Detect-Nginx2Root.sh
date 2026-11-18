@@ -98,13 +98,18 @@ analyze() {
   local label="$1" vout="$2" Vout="$3" conf="$4" bp="$5" notes="$6"
   local ver plus="" rank=0
   ver=$(grep -oE 'nginx/[0-9]+\.[0-9]+\.[0-9]+' <<<"$vout" | head -n1 | cut -d/ -f2)
+  # OpenResty (nginx-proxy-manager, Kong, etc.) prints openresty/1.27.1.2 - first 3 parts = nginx core
+  local openresty=""
+  if [[ -z "$ver" ]] && openresty=$(grep -oE 'openresty/[0-9]+(\.[0-9]+)+' <<<"$vout$Vout" | head -n1 | cut -d/ -f2) && [[ -n "$openresty" ]]; then
+    ver=$(cut -d. -f1-3 <<<"$openresty")
+  fi
   grep -qiE 'nginx-plus|plus-r[0-9]+' <<<"$vout$Vout" && plus=$(grep -oiE 'nginx-plus-r[0-9]+(-p[0-9]+)?' <<<"$vout$Vout" | head -n1)
   [[ -n "$plus" ]] || grep -qi 'nginx-plus' <<<"$vout$Vout" && plus=${plus:-"nginx-plus"}
 
   log "\n=================================================================="
   log " $label"
   log "=================================================================="
-  log " Version     : ${ver:-UNKNOWN}${plus:+ ($plus)}"
+  log " Version     : ${ver:-UNKNOWN}${plus:+ ($plus)}${openresty:+ (nginx core of OpenResty $openresty - fix needs an OpenResty/image release on nginx >= $FIX_STABLE)}"
   local pkgline; pkgline=$(grep '^PKG:' <<<"$bp" | cut -d: -f2-)
   log " Package     : ${pkgline:-n/a}"
   [[ -n "$notes" ]] && log " NOTE        : $notes"
@@ -199,7 +204,7 @@ analyze() {
       elif [[ $conf_known -eq 0 ]]; then status="IN RANGE-cfg unknown"; [[ $rank -lt 1 ]] && rank=1
       else status="IN RANGE-not exposed"; detail+="; vulnerable feature not enabled in config"; [[ $rank -lt 1 ]] && rank=1
       fi
-      [[ $inrange -eq 2 && $exposed -eq 1 ]] && status="VULNERABLE?(Plus)"
+      [[ $inrange -eq 2 && $exposed -eq 1 ]] && { [[ -n "$plus" ]] && status="VULNERABLE?(Plus)" || status="VULNERABLE?(ver unknown)"; }
     fi
     printf -v line " %-16s %-22s %s" "$cve" "$status" "$detail"; log "$line"
     [[ "$status" == VULNERABLE* ]] && log "                  -> ${DESC[$cve]}"
@@ -214,7 +219,7 @@ analyze() {
     log "               remove 'http2' from listen lines AND set 'http2 off;' per server, nginx -t, then RESTART (not reload)."
   fi
   [[ $rank -gt $RANK ]] && RANK=$rank
-  SUMMARY+=("$verdict | $label | ${ver:-?}${plus:+ $plus}")
+  SUMMARY+=("$verdict | $label | ${ver:-?}${plus:+ $plus}${openresty:+ (openresty $openresty)}")
   JSON_ITEMS+=("{\"target\":\"$(json_esc "$label")\",\"version\":\"${ver:-}\",\"plus\":\"$(json_esc "$plus")\",\"verdict\":\"$verdict\",\"notes\":\"$(json_esc "$notes")\",\"cves\":[$(IFS=,; echo "${jc[*]}")]}")
 }
 
@@ -225,6 +230,7 @@ analyze() {
 
 declare -A BINS=()     # realpath -> conf arg (may be empty)
 declare -A NOTES=()
+declare -A PFX=()      # realpath -> -p prefix (may be empty)
 
 # Running master processes (authoritative: what is actually serving)
 while read -r pid args; do
@@ -233,7 +239,8 @@ while read -r pid args; do
   bin=$(awk '{for(i=1;i<=NF;i++) if($i ~ /\/nginx$/ || $i=="nginx"){print $i; exit}}' <<<"${args#nginx: master process }")
   [[ -z "$bin" || "$bin" == "nginx" ]] && bin=${exe% (deleted)}
   [[ -z "$bin" ]] && continue
-  confarg=$(grep -oE '\-c\s+\S+' <<<"$args" | awk '{print $2}')
+  confarg=$(grep -oE '\s-c\s+\S+' <<<" $args" | awk '{print $2}')
+  pfxarg=$(grep -oE '\s-p\s+\S+' <<<" $args" | awk '{print $2}')   # e.g. GitLab: -p /var/opt/gitlab/nginx
   # Skip container processes (handled via docker exec) - compare mount namespace
   if [[ -r /proc/$pid/ns/mnt && -r /proc/self/ns/mnt && "$(readlink /proc/$pid/ns/mnt)" != "$(readlink /proc/self/ns/mnt)" ]]; then continue; fi
   if [[ "$exe" == *"(deleted)"* ]]; then
@@ -244,24 +251,27 @@ while read -r pid args; do
   else
     rp=$(readlink -f "$bin" 2>/dev/null || echo "$bin")
   fi
-  BINS["$rp"]="$confarg"
+  BINS["$rp"]="$confarg"; PFX["$rp"]="$pfxarg"
 done < <(ps -eo pid=,args= 2>/dev/null | grep -E 'nginx: master process' | grep -v grep)
 
 # Binaries on disk
 for b in "$(command -v nginx 2>/dev/null)" /usr/sbin/nginx /usr/bin/nginx /usr/local/sbin/nginx /usr/local/bin/nginx \
-         /usr/local/nginx/sbin/nginx /opt/nginx/sbin/nginx /opt/*/sbin/nginx /opt/*/nginx/sbin/nginx /usr/local/openresty/nginx/sbin/nginx; do
+         /usr/local/nginx/sbin/nginx /opt/nginx/sbin/nginx /opt/*/sbin/nginx /opt/*/nginx/sbin/nginx /opt/*/embedded/sbin/nginx /usr/local/openresty/nginx/sbin/nginx; do
   [[ -n "$b" && -x "$b" && -f "$b" ]] || continue
   rp=$(readlink -f "$b")
   [[ -n "${BINS[$rp]+x}" ]] || BINS["$rp"]=""
+  # GitLab Omnibus nginx only parses its config with its own prefix
+  [[ "$rp" == /opt/gitlab/embedded/* && -z "${PFX[$rp]:-}" && -d /var/opt/gitlab/nginx ]] && PFX["$rp"]=/var/opt/gitlab/nginx
 done
 
 for rp in "${!BINS[@]}"; do
   [[ -x "$rp" ]] || { analyze "host:$rp" "" "" "" "PKG:unknown" "${NOTES[$rp]:-binary not executable/present}"; continue; }
   vout=$("$rp" -v 2>&1); Vout=$("$rp" -V 2>&1)
-  if [[ -n "${BINS[$rp]}" ]]; then conf=$("$rp" -T -c "${BINS[$rp]}" 2>&1); else conf=$("$rp" -T 2>&1); fi
+  targs=(-T); [[ -n "${PFX[$rp]:-}" ]] && targs+=(-p "${PFX[$rp]}"); [[ -n "${BINS[$rp]}" ]] && targs+=(-c "${BINS[$rp]}")
+  conf=$("$rp" "${targs[@]}" 2>&1)
   grep -q 'test is successful' <<<"$conf" || conf=""
   bp=$(backport_hits "$rp")
-  label="host:$rp"; [[ -n "${BINS[$rp]}" ]] && label+=" (-c ${BINS[$rp]})"
+  label="host:$rp"; [[ -n "${PFX[$rp]:-}" ]] && label+=" (-p ${PFX[$rp]})"; [[ -n "${BINS[$rp]}" ]] && label+=" (-c ${BINS[$rp]})"
   analyze "$label" "$vout" "$Vout" "$conf" "$bp" "${NOTES[$rp]:-}"
 done
 
