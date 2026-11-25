@@ -4,7 +4,7 @@ A Model Context Protocol (MCP) server for the NinjaOne RMM platform. Gives AI as
 device management, monitoring, alerts, scripting/actions, patch & software management,
 organizations, policies, groups, and ticketing via the NinjaOne REST API v2.
 
-65 tools across 11 domains — see the tables below. Every tool wraps a real, verified NinjaOne
+71 tools across 11 domains — see the tables below. Every tool wraps a real, verified NinjaOne
 public API endpoint (cross-checked against NinjaOne's published OpenAPI spec); a few tools from
 an earlier version of this server called endpoints that don't actually exist (a global script
 library, a per-job status lookup, a device-alerts bulk delete) — those have been fixed or
@@ -104,6 +104,7 @@ npx @modelcontextprotocol/inspector node dist/index.js
 | Tool | Description |
 |------|-------------|
 | `ninjaone_get_device_custom_fields` / `ninjaone_update_device_custom_fields` | Read/write custom field values |
+| `ninjaone_get_organization_custom_fields` / `ninjaone_update_organization_custom_fields` | Read/write organization-level custom fields |
 | `ninjaone_set_device_maintenance` / `ninjaone_clear_device_maintenance` | Schedule/end a maintenance window |
 | `ninjaone_get_device_policy_overrides` / `ninjaone_clear_device_policy_overrides` | View/reset device-level policy overrides |
 
@@ -164,6 +165,7 @@ through policies in the console, or triggered via a script. These tools cover st
 | Tool | Description |
 |------|-------------|
 | `ninjaone_list_alerts` | List active alerts with filters |
+| `ninjaone_alert_summary` | Count active alerts by severity, priority, organization (mapped from device) and condition |
 | `ninjaone_reset_alert` | Reset an alert's condition by UID |
 | `ninjaone_delete_alert` | Delete an alert record by UID |
 | `ninjaone_reset_device_alerts` | Reset every active alert on a device |
@@ -185,6 +187,8 @@ through policies in the console, or triggered via a script. These tools cover st
 | `ninjaone_create_ticket` / `ninjaone_update_ticket` | Create/update a ticket (update can add a comment) |
 | `ninjaone_get_ticket_log_entries` | Get a ticket's comment/status history |
 | `ninjaone_list_ticket_forms` / `ninjaone_list_ticket_contacts` | List ticket forms / contacts |
+| `ninjaone_get_ticket` | Get one ticket by ID (no board search needed) |
+| `ninjaone_list_ticket_statuses` | Valid ticket statuses and IDs, for use with `ninjaone_update_ticket` |
 
 ## API Regions
 
@@ -204,3 +208,7 @@ through policies in the console, or triggered via a script. These tools cover st
   accepts it.
 - Ticketing uses NinjaOne's board-based model (similar to ConnectWise Manage's boards/queues) —
   there's no flat "list all tickets" endpoint; you search within a board.
+
+## Rate limiting
+
+HTTP 429 responses are retried automatically up to 3 times, honoring `Retry-After` (otherwise 2s/4s/8s backoff).

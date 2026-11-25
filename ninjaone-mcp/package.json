@@ -1,6 +1,6 @@
 {
   "name": "ninjaone-mcp-server",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "MCP server for NinjaOne RMM — device management, monitoring, alerts, scripting, patch management, organizations, policies, and ticketing",
   "type": "module",
   "main": "dist/index.js",

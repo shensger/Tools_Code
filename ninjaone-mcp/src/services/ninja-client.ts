@@ -75,7 +75,20 @@ export class NinjaOneClient {
     this.http.interceptors.response.use(
       (response) => response,
       async (error) => {
-        const config = error?.config as (import("axios").AxiosRequestConfig & { _retried?: boolean }) | undefined;
+        const config = error?.config as (import("axios").AxiosRequestConfig & { _retried?: boolean; _429Count?: number }) | undefined;
+
+        // Rate limited: wait (Retry-After if given, else 2s/4s/8s) and retry up to 3 times.
+        // A 429 is rejected before processing, so retrying writes is safe too.
+        if (axios.isAxiosError(error) && error.response?.status === 429 && config && (config._429Count ?? 0) < 3) {
+          const attempt = config._429Count ?? 0;
+          config._429Count = attempt + 1;
+          const ra = Number(error.response.headers?.["retry-after"]);
+          const waitMs = Number.isFinite(ra) && ra > 0 ? Math.min(ra, 60) * 1000 : 2000 * 2 ** attempt;
+          console.error(`NinjaOne 429 on ${config.method?.toUpperCase()} ${config.url}; retrying in ${waitMs}ms (${attempt + 1}/3)`);
+          await new Promise((r) => setTimeout(r, waitMs));
+          return this.http.request(config);
+        }
+
         if (
           axios.isAxiosError(error) &&
           error.response?.status === 401 &&
