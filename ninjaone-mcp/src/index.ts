@@ -26,12 +26,13 @@ import { registerAlertTools } from "./tools/alerts.js";
 import { registerScriptTools } from "./tools/scripts.js";
 import { registerTicketTools } from "./tools/tickets.js";
 import { registerQueryTools } from "./tools/queries.js";
+import { registerExtraTools } from "./tools/extras.js";
 
 // ─── Server Setup ─────────────────────────────────────────────────────────────
 
 const server = new McpServer({
   name: "ninjaone-mcp-server",
-  version: "1.1.0",
+  version: "1.2.0",
 });
 
 // Register all tool domains
@@ -46,6 +47,7 @@ registerAlertTools(server);
 registerScriptTools(server);
 registerTicketTools(server);
 registerQueryTools(server);
+registerExtraTools(server);
 
 // ─── Entry Point ──────────────────────────────────────────────────────────────
 
