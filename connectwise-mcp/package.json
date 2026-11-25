@@ -1,0 +1,25 @@
+{
+  "name": "connectwise-mcp-server",
+  "version": "1.1.0",
+  "description": "MCP server for ConnectWise Manage (PSA) REST API — service tickets, time entries, companies, contacts, configurations, scheduling, agreements, projects",
+  "type": "module",
+  "main": "dist/index.js",
+  "bin": { "connectwise-mcp-server": "dist/index.js" },
+  "scripts": {
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc && node -e \"require('fs').chmodSync('dist/index.js', 0o755)\"",
+    "clean": "rm -rf dist",
+    "inspect": "npx @modelcontextprotocol/inspector node dist/index.js"
+  },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.30.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
